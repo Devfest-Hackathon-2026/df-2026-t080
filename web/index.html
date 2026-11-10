@@ -1,0 +1,88 @@
+<!doctype html>
+<html lang="ja" data-astryx-theme="intentrip">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="description" content="行く時間をずらして、混雑を避ける1日のプランを組みます。" />
+    <script>
+      (() => {
+        const ok = (v) => v === 'ja' || v === 'en'
+        let l = null
+        try {
+          l = new URLSearchParams(location.search).get('lang')
+        } catch {}
+        if (!ok(l)) {
+          try {
+            l = localStorage.getItem('intentrip:lang')
+          } catch {
+            l = null
+          }
+        }
+        if (!ok(l)) {
+          const nav = navigator
+          const ls = nav.languages && nav.languages.length ? nav.languages : nav.language ? [nav.language] : []
+          l = ls.length ? 'en' : 'ja'
+          for (const x of ls) {
+            const y = x.toLowerCase()
+            if (y === 'ja' || y.startsWith('ja-')) {
+              l = 'ja'
+              break
+            }
+            if (y === 'en' || y.startsWith('en-')) {
+              l = 'en'
+              break
+            }
+          }
+        }
+        document.documentElement.lang = l
+        if (!/github\.io$/.test(location.hostname)) {
+          for (const u of ['/api/sample?lang=' + l, '/api/config']) {
+            const k = document.createElement('link')
+            k.rel = 'preload'
+            k.as = 'fetch'
+            k.crossOrigin = 'anonymous'
+            k.href = u
+            document.head.appendChild(k)
+          }
+        }
+        if (l === 'en') {
+          document.querySelector('meta[name="description"]')?.setAttribute('content', 'Plan a day that avoids crowded times and places.')
+        }
+      })()
+    </script>
+    <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#1b1b1b" media="(prefers-color-scheme: dark)" />
+    <style>
+      @layer reset, legacy, astryx-base, astryx-theme, app;
+    </style>
+    <title>IntenTrip｜行く時間をずらして混雑を避ける1日の旅</title>
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="IntenTrip" />
+    <meta property="og:title" content="IntenTrip" />
+    <meta property="og:description" content="行く時間をずらして、混雑を避ける1日のプランを組みます。" />
+    <meta property="og:url" content="https://intentrip-29919508404.asia-northeast1.run.app/" />
+    <meta property="og:image" content="https://intentrip-29919508404.asia-northeast1.run.app/og-image.png" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:image:alt" content="IntenTrip" />
+    <meta property="og:locale" content="ja_JP" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="apple-mobile-web-app-title" content="IntenTrip" />
+    <meta name="application-name" content="IntenTrip" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png" />
+    <link rel="alternate icon" href="/favicon.ico" />
+    <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png" />
+    <link rel="manifest" href="/site.webmanifest" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link rel="preconnect" href="https://tiles.openfreemap.org" crossorigin />
+    <link rel="preconnect" href="https://upload.wikimedia.org" />
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Figtree:wght@400;500;600;700&display=swap" media="print" onload="this.media='all'" />
+    <noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Figtree:wght@400;500;600;700&display=swap" /></noscript>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

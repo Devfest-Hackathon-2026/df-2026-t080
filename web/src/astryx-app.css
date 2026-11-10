@@ -1,0 +1,1176 @@
+/* Astryx の部品を、この app の並べ方に合わせる（@layer app。Astryx の部品より強い） */
+
+/* 候補の行の右の印: 押せる所を 44px にする（Astryx の印の入力は、印の上に透明に重なっている） */
+.sp-check {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  width: var(--tap);
+  margin-right: -2px;
+  padding-top: 10px;
+  flex: none;
+}
+/* チェックの下の「追加」（選ぶと「選択中」）。行を押すと詳細、チェックで追加だと分かるように */
+.sp-check-word {
+  margin-top: 4px;
+  font-size: 13px;
+  line-height: 1.2;
+  white-space: nowrap;
+  color: var(--color-text-secondary);
+  cursor: pointer;
+}
+.sp-item[data-on] .sp-check-word {
+  color: var(--color-accent);
+}
+.sp-check input[type='checkbox'] {
+  width: var(--tap);
+  height: var(--tap);
+}
+
+/* 候補の行: Astryx の Item を、押せる行（button）の中に置く。名前と説明は 1 行ずつで、長い説明は「…」 */
+.pick-list li {
+  padding: 2px 0;
+}
+.pick-row {
+  min-width: 0;
+  padding: 0;
+}
+.pick-row > .astryx-item {
+  flex: 1;
+  min-width: 0;
+  padding-inline: 0;
+}
+.pick-row .thumb {
+  margin-right: 4px;
+}
+.pick-row .pick-sub {
+  display: block;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.pick-group .sp-more {
+  margin-left: calc(-1 * var(--spacing-3));
+}
+.sp-lead {
+  margin: 4px 0 8px;
+}
+.sp-tabs {
+  margin-bottom: 4px;
+}
+.pick-group .sec-title {
+  margin: 20px 0 4px;
+}
+
+/* シートの見出し: 題は場所の名前などの主役なので 22px（番号の札と並べる） */
+.sheet-heading > .astryx-heading {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: var(--text-large-size);
+  line-height: var(--text-large-leading);
+}
+.sheet-bar > .sheet-close {
+  flex: none;
+  margin-right: calc(-1 * var(--spacing-2));
+}
+.sheet-bar > .sheet-back {
+  margin-left: calc(-1 * var(--spacing-3));
+  color: var(--color-text-accent);
+}
+
+/* 理由の欄 */
+.why .why-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 8px 0 12px;
+}
+.why .why-text {
+  width: 100%;
+}
+
+/* 外へ開くリンク（Google マップ・経路）。押せる高さは 44px */
+.astryx-link.text-link,
+.astryx-link.maps-web {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-height: var(--tap);
+}
+
+/* 場所の詳細: 滞在と順番の増減、ほかの候補の行 */
+.edit-stay .step-glyph {
+  font-size: 22px;
+  font-weight: 700;
+  line-height: 1;
+}
+.sheet .why-go {
+  margin-left: calc(-1 * var(--spacing-3));
+  color: var(--color-text-accent);
+}
+.alt-row {
+  padding: 2px 0;
+}
+.alt-row > .astryx-item {
+  flex: 1;
+  min-width: 0;
+  padding-inline: 0;
+}
+.alt-row .alt-name {
+  font-weight: 700;
+}
+
+/* プランの画面: スケジュールの札は Astryx の Card と同じ面・線・角にする（影は使わない） */
+.rt-stop-row {
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-container);
+  background: var(--color-background-card);
+}
+.rt-stop-row > .rt-stop {
+  border-radius: var(--radius-container) 0 0 var(--radius-container);
+}
+@media (hover: hover) and (pointer: fine) {
+  button.rt-node:hover,
+  button.rt-leg-btn:hover {
+    background: var(--color-overlay-hover);
+  }
+}
+.rt-steps .rt-step {
+  flex: none;
+}
+.sec-head .sec-head-actions {
+  display: flex;
+  gap: 4px;
+  margin-right: calc(-1 * var(--spacing-3));
+}
+.sec-head .sec-head-actions .astryx-button:not([data-variant='primary']) {
+  color: var(--color-text-accent);
+}
+
+/* 概要の札・服装・ペンギン: Astryx の Card（中の並びは前からの CSS） */
+.summary.astryx-card,
+.wear.astryx-card,
+.penguin.astryx-card {
+  border: 1px solid var(--color-border);
+}
+.summary .sum-more {
+  margin: 4px 0;
+}
+.summary .sum-more > .astryx-collapsible-trigger {
+  font-size: var(--text-body-size);
+}
+.summary .sum-line {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  column-gap: 10px;
+  text-align: left;
+}
+.penguin-head .penguin-close {
+  margin-left: auto;
+}
+
+/* 共有のメニュー: Astryx のメニューと同じ面と線 */
+.share-list {
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-container);
+  background: var(--color-background-popover);
+}
+
+/* 旅のミッション */
+.odai .odai-level {
+  margin: 4px 0 12px;
+}
+.odai .odai-level-label {
+  margin-bottom: 0;
+}
+
+/* 調整のシート */
+.ask-row .ask-text {
+  flex: 1;
+  min-width: 0;
+}
+.sheet .toggles {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.sheet .toggles.grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+}
+.sheet .more > .astryx-collapsible-trigger {
+  min-height: var(--tap);
+  font-size: var(--text-body-size);
+  font-weight: 700;
+}
+.more-part {
+  margin-top: 12px;
+}
+
+/* 便のシート: 便の札は Astryx の Card と同じ面・線・角。選んである便は浅葱の線 */
+.bus-trip {
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-container);
+  background: var(--color-background-card);
+}
+.bus-trip[data-on] {
+  border: 2px solid var(--color-accent);
+}
+.bus-maps .leg-action.astryx-button {
+  margin-left: calc(-1 * var(--spacing-3));
+  color: var(--color-text-accent);
+  font-weight: 700;
+  text-decoration: none;
+}
+
+/* ホームと入力の画面 */
+.form-head .wordmark {
+  letter-spacing: -0.01em;
+}
+.home-item {
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-container);
+  background: var(--color-background-card);
+}
+.home-item[data-now] {
+  border: 2px solid var(--color-accent);
+}
+.form-body .big-field input {
+  font-size: var(--text-large-size);
+  font-weight: 700;
+}
+.form-body .big-field input::placeholder {
+  font-size: var(--text-heading-3-size);
+  font-weight: 400;
+}
+.form-body .toggles {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.form-body .back-row {
+  display: flex;
+  align-items: center;
+  min-height: var(--tap);
+}
+
+/* 画面の上の見出し: 題は今の見出しと同じ 22px で 1 行、日付と天気は横に並べる */
+.top-title > .astryx-heading {
+  font-size: var(--text-large-size);
+  line-height: var(--text-large-leading);
+}
+.top-title > p.astryx-text {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0 10px;
+  margin-top: 2px;
+}
+
+/* 押せる所は 44px 以上（Astryx の開け閉め・切り替えの組・印は、そのままだと 32〜36px） */
+.astryx-collapsible-trigger,
+.astryx-segmented-control-item {
+  min-height: var(--tap);
+}
+.form-body .back-row input[type='checkbox'] {
+  width: var(--tap);
+  height: var(--tap);
+}
+.form-body .back-row .astryx-field-label {
+  min-height: var(--tap);
+  display: flex;
+  align-items: center;
+}
+
+/* ── 2 回目の作り直し: 画面の並び ───────────────────────── */
+
+/* 塊をまとめる淡い面と、その中の札（暗い画面では、地より一段明るい面にする） */
+:root {
+  --panel: light-dark(#f1f1f1, #262626);
+  --panel-in: light-dark(#ffffff, #333333);
+}
+
+/* 上の帯: 白い面に、下へ薄い影。題の左の浅葱の線はやめ、題を太く */
+.top {
+  border-bottom: 0;
+  box-shadow: var(--shadow-low);
+}
+.top-title {
+  padding-left: 0;
+  border-left: 0;
+}
+
+/* 最初の画面: 地図は低くし、見出しと候補を先に見せる */
+.start-pick .map-pane {
+  height: 26svh;
+  min-height: 200px;
+}
+.start-pick .panel {
+  padding-top: 24px;
+}
+.sp-lead {
+  margin: 0 0 6px;
+  font-size: 22px;
+  line-height: 1.3;
+}
+.sp-intro {
+  margin: 0 0 16px;
+}
+.sp-tabs {
+  margin: 0 0 8px;
+}
+.sp-group-title {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+.sp-group-n {
+  font-size: var(--text-supporting-size);
+  font-weight: 400;
+  color: var(--color-text-secondary);
+}
+.pick-group .sec-title {
+  margin: 24px 0 10px;
+}
+/* 切り口の見出しの下の、探した場所の種類（1 行） */
+.pick-group .sp-group-hint {
+  margin: -6px 0 10px;
+  overflow: hidden;
+  font-size: 13px;
+  color: var(--color-text-secondary);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* 候補は 1 件ずつ札にする。選ぶと墨の枠と淡い灰の面 */
+.pick-list li.sp-item {
+  position: relative;
+  gap: 4px;
+  margin: 0 0 10px;
+  padding: 10px 6px 10px 10px;
+  border: 1px solid var(--color-border);
+  border-top: 1px solid var(--color-border);
+  border-radius: var(--radius-container);
+  background: var(--color-background-surface);
+}
+/* チェックで選んだ直後の、理由を聞く段（行の下に全幅で出す。理由の札は横に送る 1 列） */
+.pick-list li.sp-item[data-ask] {
+  flex-wrap: wrap;
+}
+.sp-ask {
+  flex: 1 0 100%;
+  min-width: 0;
+  margin-top: 4px;
+  padding-top: 4px;
+  border-top: 1px solid var(--color-border);
+}
+.sp-ask-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.sp-ask-title {
+  font-size: 13px;
+  color: var(--color-text-secondary);
+}
+.sp-ask-chips {
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+  scrollbar-width: none;
+  margin-right: -6px;
+  padding: 0 24px 2px 0;
+  mask-image: linear-gradient(to right, #000 calc(100% - 24px), transparent);
+}
+.sp-ask-chips::-webkit-scrollbar {
+  display: none;
+}
+.sp-ask-chips .why-chip {
+  flex: none;
+  white-space: nowrap;
+}
+.pick-list li.sp-item[data-on] {
+  border-color: var(--color-accent);
+  box-shadow: inset 0 0 0 1px var(--color-accent);
+  background: var(--panel);
+}
+.pick-row .thumb {
+  width: 76px;
+  height: 76px;
+  margin-right: 8px;
+  border-radius: var(--radius-element);
+}
+.pick-row .pick-name {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 8px;
+  font-size: 17px;
+  font-weight: 700;
+  line-height: 1.3;
+}
+.pick-row .pick-sub {
+  display: grid;
+  gap: 2px;
+  margin-top: 4px;
+  white-space: normal;
+}
+.pick-sub .sp-district {
+  color: var(--color-text-secondary);
+}
+.pick-sub .sp-feat,
+.pick-sub .sp-why {
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+}
+.pick-sub .sp-why {
+  color: var(--color-text-primary);
+}
+/* 地区と空いている時間帯の一言、希望に合う理由は 1 行に収める（入らないときは地区から縮める）。理由を出す札は特徴を 1 行にして、札の高さを変えない */
+.pick-sub .sp-meta {
+  display: flex;
+  min-width: 0;
+  white-space: nowrap;
+}
+.pick-sub .sp-meta > span {
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.pick-sub .sp-meta > .sp-district {
+  flex-shrink: 100000;
+  min-width: 2em;
+}
+.pick-sub .sp-meta > .sp-sep {
+  flex: none;
+  white-space: pre;
+}
+.pick-sub .sp-fit {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.pick-sub .sp-quiet,
+.pick-sub .sp-fit {
+  color: var(--color-text-primary);
+}
+.pick-sub .sp-feat[data-short] {
+  -webkit-line-clamp: 1;
+  line-clamp: 1;
+}
+.pick-group .sp-more {
+  margin: 2px 0 0;
+}
+
+/* 下の帯: 一覧の上に浮かべる（上の角を丸め、上へ影） */
+.sp-bar {
+  border-top: 0;
+  border-radius: var(--radius-page) var(--radius-page) 0 0;
+  background: var(--color-background-surface);
+  box-shadow: var(--shadow-high);
+}
+
+/* 広い画面: 左に浮いた白い札（見出しと一覧）、右に角丸の地図。間は淡い灰 */
+@media (min-width: 960px) {
+  .plan-view {
+    gap: 0 12px;
+    padding: 12px;
+    box-sizing: border-box;
+    background: var(--panel);
+  }
+  .plan-view::before {
+    content: '';
+    grid-column: 1;
+    grid-row: 1 / span 2;
+    border-radius: var(--radius-page);
+    background: var(--color-background-surface);
+    box-shadow: var(--shadow-low);
+  }
+  .plan-view > .top {
+    position: relative;
+    z-index: 1;
+    border-right: 0;
+    border-radius: var(--radius-page) var(--radius-page) 0 0;
+    padding-top: 16px;
+    padding-left: 20px;
+    padding-right: 20px;
+    background: transparent;
+    box-shadow: none;
+  }
+  .plan-view > .panel {
+    position: relative;
+    z-index: 1;
+    padding-left: 20px;
+    padding-right: 20px;
+    border-right: 0;
+    border-radius: 0 0 var(--radius-page) var(--radius-page);
+  }
+  .plan-view > .map-pane {
+    overflow: hidden;
+    border-radius: var(--radius-page);
+    box-shadow: var(--shadow-low);
+  }
+  .start-pick .map-pane {
+    height: auto;
+  }
+  .sp-bar {
+    margin-left: -20px;
+    margin-right: -20px;
+    padding-left: 20px;
+    padding-right: 20px;
+    border-radius: var(--radius-page);
+  }
+  /* シートは左の札にぴったり重ねる */
+  .sheet {
+    top: 12px;
+    left: 12px;
+    bottom: 12px;
+    border-right: 0;
+    border-radius: var(--radius-page);
+    box-shadow: var(--shadow-high);
+  }
+}
+
+.sp-own {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px 12px;
+  flex-wrap: wrap;
+  margin: -6px 0 16px;
+}
+
+/* シート: Astryx の BottomSheet と同じ形（上の角 28px・既定の影 high）。閉じるは × の丸いボタン */
+.sheet {
+  border-radius: var(--radius-page) var(--radius-page) 0 0;
+  background: var(--color-background-surface);
+  box-shadow: var(--shadow-high);
+}
+@media (max-width: 959px) {
+  .sheet.card {
+    border-top: 0;
+  }
+}
+.sheet-bar > .sheet-close {
+  margin-right: 0;
+  border-radius: var(--radius-full);
+}
+.cand-bar {
+  border-top: 0;
+  background: var(--color-background-surface);
+  box-shadow: 0 -1px 0 var(--color-border);
+}
+
+/* プランの画面: 概要の札。主役はいちばん上の混雑の比べ（減った割合を 28px の浅葱）。その下に題と時刻（22px）、数の札（場所・滞在・移動）、日数は Badge */
+.summary.astryx-card {
+  margin: 0 0 28px;
+  padding: 20px;
+  border: 0;
+  border-radius: var(--radius-page);
+  background: var(--panel);
+}
+.summary .hope {
+  gap: 8px;
+}
+.summary .hope-days {
+  display: flex;
+}
+.summary .hope-text {
+  font-size: 17px;
+  font-weight: 700;
+  line-height: 1.4;
+}
+.summary .sum-time {
+  margin: 12px 0 0;
+  font-size: 22px;
+  font-weight: 700;
+  line-height: 1.2;
+  letter-spacing: 0.01em;
+}
+.summary .sum-stats {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(5.5em, 1fr));
+  gap: 8px;
+  margin: 14px 0 4px;
+}
+.summary .sum-stats:has(> div:nth-child(4)) {
+  grid-template-columns: repeat(auto-fit, minmax(7.5em, 1fr));
+}
+.summary .sum-stats > div {
+  padding: 10px 12px;
+  border-radius: var(--radius-element);
+  background: var(--panel-in);
+}
+.summary .sum-stats dt {
+  font-size: 13px;
+  color: var(--color-text-secondary);
+}
+.summary .sum-stats dd {
+  margin: 2px 0 0;
+  font-size: 15px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+.summary > .note {
+  margin-top: 10px;
+}
+
+/* スケジュール: 見出しの右は線のボタン 2 つ。場所の札は白い面に影 low、区間は地の上の細い行 */
+.sec-head .sec-head-actions {
+  gap: 8px;
+  margin-right: 0;
+}
+.sec-head .sec-head-actions .astryx-button:not([data-variant='primary']) {
+  color: var(--color-text-primary);
+}
+.schedule .sec-title {
+  font-size: 22px;
+}
+.rt-stop-row {
+  margin: 4px 0;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-container);
+  background: var(--color-background-surface);
+  box-shadow: none;
+}
+.rt-stop .rt-name {
+  font-size: 17px;
+}
+.rt-stop .thumb {
+  width: 64px;
+  height: 64px;
+  border-radius: var(--radius-element);
+}
+
+/* 下の札: ペンギンの一言・服装・旅のミッションは淡い灰の面にまとめる */
+.wear.astryx-card,
+.penguin.astryx-card {
+  border: 0;
+  border-radius: var(--radius-page);
+  background: var(--panel);
+}
+section.odai {
+  border: 0;
+  border-radius: var(--radius-page);
+  background: var(--panel);
+}
+.plan-foot {
+  margin-top: 28px;
+  padding-top: 16px;
+  border-top: 1px solid var(--color-border);
+}
+.schedule .sec-head {
+  flex-wrap: wrap;
+  row-gap: 8px;
+}
+.schedule .sec-title {
+  white-space: nowrap;
+}
+
+/* 場所の詳細: 予定の箱（滞在・順番・外す）は淡い灰の面 */
+.sheet-sec.edit {
+  padding: 16px;
+  border: 0;
+  border-radius: var(--radius-page);
+  background: var(--panel);
+}
+/* 便の札: 影 low の白い面。選んである便は墨の枠。途中の停留所の開け閉めは墨の字 */
+.bus-trip {
+  border: 0;
+  box-shadow: var(--shadow-low);
+}
+.bus-trip[data-on] {
+  outline: 0;
+  box-shadow: inset 0 0 0 2px var(--color-accent), var(--shadow-low);
+}
+.tl-via-toggle,
+.bus-chosen {
+  color: var(--color-text-primary);
+}
+
+/* ホームと入力の画面: 題の左の浅葱の線はやめ、アプリの名前を大きく */
+.form-head {
+  padding-left: 0;
+  border-left: 0;
+}
+.form-head .wordmark {
+  font-size: 34px;
+  letter-spacing: -0.01em;
+}
+
+/* ホーム: 旅の札は、最初の場所の写真を上に大きく出す札（影 low・大きな角丸） */
+.home-item {
+  overflow: hidden;
+  border: 0;
+  border-radius: var(--radius-page);
+  box-shadow: var(--shadow-low);
+}
+.home-item[data-now] {
+  box-shadow: inset 0 0 0 2px var(--color-accent), var(--shadow-low);
+}
+.home-open {
+  grid-template-columns: minmax(0, 1fr) auto;
+  row-gap: 4px;
+  padding: 0 20px 16px;
+  border-radius: 0;
+}
+.home-open .home-thumb {
+  grid-column: 1 / -1;
+  margin: 0 -20px 10px;
+}
+.home-open .home-thumb .thumb {
+  display: block;
+  width: 100%;
+  height: 148px;
+  border-radius: 0;
+}
+.home-open .home-thumb .thumb.thumb-kind {
+  height: 72px;
+  border: 0;
+  background: var(--panel);
+}
+.home-open .home-text {
+  grid-column: 1;
+}
+.home-open .home-title {
+  font-size: 22px;
+}
+.home-open .home-left {
+  grid-column: 2;
+  align-self: end;
+}
+.home-now,
+.home-open .home-left {
+  color: var(--color-text-primary);
+}
+
+/* 入力の画面: 塊（どこから・どこで終わる／希望／日付と時刻）を淡い灰の面にし、作るボタンは下に固定 */
+.form-body > .field,
+.form-body > .when {
+  padding: 16px;
+  border-radius: var(--radius-page);
+  background: var(--panel);
+}
+.form-body .field label,
+.form-body .field .field-label {
+  font-size: 15px;
+  color: var(--color-text-primary);
+}
+.form-body .field .astryx-field-label:not(.astryx-checkbox-label) {
+  font-weight: 700;
+}
+.form-body > .submit {
+  position: sticky;
+  bottom: 0;
+  z-index: 2;
+  margin: 0 -20px;
+  padding: 12px 20px calc(12px + env(safe-area-inset-bottom, 0px));
+  border-radius: var(--radius-page) var(--radius-page) 0 0;
+  background: var(--color-background-surface);
+  box-shadow: var(--shadow-high);
+}
+
+/* ── 3 回目: 残りのシートと画面を同じ形にそろえる ───────────────── */
+
+/* 前からの線のボタン（外へ開くリンク・写真を選ぶ）は、Astryx の secondary のボタンと同じ面・角・字 */
+.btn-line,
+.astryx-link.btn-line {
+  min-height: 48px;
+  padding: 8px 16px;
+  border: 0;
+  border-radius: var(--radius-element);
+  background: var(--color-neutral);
+  color: var(--color-text-primary);
+  font-size: 15px;
+  font-weight: 500;
+  text-decoration: none;
+}
+.btn-line:hover,
+.astryx-link.btn-line:hover {
+  background: var(--color-neutral);
+  box-shadow: inset 0 0 0 100vmax var(--color-overlay-hover);
+  color: var(--color-text-primary);
+}
+.btn-primary.file {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 48px;
+  border-radius: var(--radius-element);
+  background: var(--color-accent);
+  color: var(--color-on-accent);
+  font-size: 15px;
+  font-weight: 500;
+  letter-spacing: 0;
+}
+
+/* 乗換のスクリーンショットの手順: 番号は路線の色ではなく、淡い灰の丸に墨の字 */
+.howto-no {
+  border: 0;
+  border-radius: var(--radius-full);
+  background: var(--color-neutral);
+  color: var(--color-text-primary);
+  font-size: 15px;
+}
+.transit-shot {
+  border-top: 0;
+  padding: 16px;
+  border-radius: var(--radius-page);
+  background: var(--panel);
+}
+
+/* 調整のシート: 回り方・Gemini に頼む・日付と時刻は、入力の画面と同じ淡い灰の面の塊 */
+.sheet .panel-sec {
+  margin-top: 12px;
+  padding: 16px;
+  border: 0;
+  border-radius: var(--radius-page);
+  background: var(--panel);
+}
+.sheet .panel-sec.first {
+  margin-top: 0;
+}
+.sheet .panel-sec .sec-title {
+  margin-top: 0;
+}
+
+/* 共有のメニュー: 地図の上に浮くので、Astryx のメニューと同じ影 */
+.share-list {
+  border: 0;
+  box-shadow: var(--shadow-med);
+}
+
+/* 保存の勧め・候補を探している間: 塊は淡い灰の面 */
+.save-nudge,
+.form-body .progress {
+  border: 0;
+  border-radius: var(--radius-page);
+  background: var(--panel);
+}
+.save-nudge {
+  padding: 16px;
+}
+.fav-ask {
+  margin: 12px 0 24px;
+  padding: 16px;
+  border-radius: var(--radius-page);
+  background: var(--panel);
+}
+.fav-ask-places {
+  margin-top: 12px;
+}
+.fav-ask-actions {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 12px;
+}
+.progress-line li {
+  font-size: 13px;
+}
+
+/* この付近を検索: 欄は Astryx の入力の欄と同じ角と縁、結果は候補の札と同じ面・線・角。開いている結果は墨の枠 */
+:root {
+  --edge: light-dark(#8a8a8a, #858585);
+}
+.as-input {
+  border: 1px solid var(--edge);
+  border-radius: var(--radius-element);
+  background: var(--color-background-surface);
+  color: var(--color-text-primary);
+}
+.as-item {
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-container);
+  background: var(--color-background-surface);
+}
+.as-item[data-on] {
+  outline: 0;
+  border-color: var(--color-accent);
+  box-shadow: inset 0 0 0 1px var(--color-accent);
+}
+.as-row {
+  border-radius: var(--radius-container);
+}
+
+/* ── 見やすさ: 押せる物の縁・選んだ印・字のコントラストと大きさ ─────────── */
+
+/* 押せる物の縁（選ぶ前の印・入力の欄・日付と時刻・選ぶ欄）は、地と塊の面の上で 3:1 を超える灰 */
+.astryx-checkbox-input input:not(:checked) ~ * .astryx-checkbox-indicator {
+  border-color: var(--edge);
+}
+.astryx-text-input:not(:focus-within),
+.astryx-text-area:not(:focus-within) {
+  border-color: var(--edge);
+}
+input[type='date']:not(:focus-visible),
+input[type='time']:not(:focus-visible),
+select:not(:focus-visible) {
+  border-color: var(--edge);
+}
+
+/* 切り替えの組（種類・難しさ・数）の選んである方は、選んだ札と同じく墨の枠で示す */
+.astryx-segmented-control-item[data-selected] {
+  box-shadow: inset 0 0 0 2px var(--color-accent);
+}
+
+/* 切り替えの組の選んでいない方の字は、暗い画面の溝の上でも 4.5:1 を超える灰 */
+.astryx-segmented-control-item:not([data-selected]) {
+  color: light-dark(#474747, #c6c6c6);
+}
+
+/* 読み込み中の点滅は、薄くなったときも補足の字が 4.5:1 を保つ濃さまで */
+@keyframes pulse {
+  50% {
+    opacity: 0.85;
+  }
+}
+
+/* 混雑の時刻の目盛り・道を調べている間の一言は、補足の段（13px） */
+.bars-axis,
+.route-wait {
+  font-size: 13px;
+}
+
+/* シートの中の塊の面は、シートの面より一段明るくする（暗い画面ではシートの面が #262626） */
+.sheet {
+  --panel: light-dark(#f1f1f1, #333333);
+  --panel-in: light-dark(#ffffff, #404040);
+}
+
+/* シートの「戻る」は左に 1 行で置き、題はその下の行 */
+.sheet-bar > .sheet-back {
+  flex-basis: auto;
+}
+.sheet-bar > .sheet-back + .sheet-heading {
+  flex-basis: 100%;
+}
+
+/* 広い画面: 上の帯（共有のメニュー）は、下の一覧の面より手前 */
+@media (min-width: 960px) {
+  .plan-view > .top {
+    z-index: 2;
+  }
+}
+
+/* スケジュールの区間は 1 行: 坂の線と言葉も、分と距離の右に並べる（入りきらないときだけ折り返す） */
+.rt-leg-head .rt-slope {
+  display: inline-flex;
+  margin-left: 8px;
+  vertical-align: middle;
+  white-space: nowrap;
+}
+
+/* スケジュールの時刻の列: Figtree の数字は幅があるので、「10:19」と番号の札の間を空け、札の左の枠との間も空ける（並べ替えのときは時刻を出さず、8px だけ空ける） */
+.rt-node {
+  grid-template-columns: 84px 38px minmax(0, 1fr) auto;
+}
+.rt-leg {
+  grid-template-columns: 84px 38px minmax(0, 1fr);
+}
+.rt-time {
+  padding-right: 10px;
+}
+.route[data-editing] .rt-node {
+  grid-template-columns: 8px 38px minmax(0, 1fr) auto;
+}
+.route[data-editing] .rt-leg {
+  grid-template-columns: 8px 38px minmax(0, 1fr);
+}
+.route[data-editing] .rt-time {
+  padding-right: 0;
+}
+/* 並べ替えのあいだは、右下の「地図」のボタンを出さない（下の場所の上下のボタンに重なる） */
+body:has(.route[data-editing]) > .map-float {
+  display: none;
+}
+
+/* 徒歩の点: 番号の札や丸の下にめり込まず、区切りで欠けないように、区間ごとの中に丸ごと並べる（線の区間は今までどおりつなげる） */
+.rt-rail {
+  --cap: 16px;
+}
+.rt-end > .rt-rail {
+  --cap: 9px;
+}
+.rt-node[data-in='walk'] > .rt-rail::before,
+.rt-node[data-out='walk'] > .rt-rail::after,
+.rt-leg[data-mode='walk'] > .rt-rail::before {
+  background: radial-gradient(circle, var(--route) 2.6px, transparent 3px) center / 6px 10px;
+  background-repeat: no-repeat round;
+}
+.rt-node[data-in='walk'] > .rt-rail::before {
+  top: 0;
+  bottom: calc(50% + var(--cap) + 4px);
+}
+.rt-node[data-out='walk'] > .rt-rail::after {
+  top: calc(50% + var(--cap) + 4px);
+  bottom: 0;
+}
+/* 札の中の点は、札の上下の余白（8px）まで伸ばし、札の縁まで続ける */
+.rt-stop[data-in='walk'] > .rt-rail::before {
+  top: -8px;
+}
+.rt-stop[data-out='walk'] > .rt-rail::after {
+  bottom: -8px;
+}
+/* 区間の点は、区間の上下の余白（8px）と札との間（4px）まで伸ばす */
+.rt-leg[data-mode='walk'] > .rt-rail::before {
+  top: -12px;
+  bottom: -12px;
+}
+
+/* シートの中の日付・出発・帰る時刻は、日付を上の行、時刻 2 つを下の行に（PC の左の列は狭く、3 つ並べると時計の印が切れる） */
+.sheet .when {
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+}
+.sheet .when-date {
+  grid-column: 1 / -1;
+}
+
+/* 暗い画面の混雑の棒: 空いている時間の棒も、シートの面の上で形が分かる明るさに */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) {
+    --heat-0: #46505c;
+  }
+}
+:root[data-theme='dark'] {
+  --heat-0: #46505c;
+}
+
+/* スケジュールの区間の字は、区間の幅の中で折り返す */
+.rt-leg-btn,
+.rt-leg-body {
+  min-width: 0;
+  max-width: 100%;
+}
+.rt-leg-body > * {
+  max-width: 100%;
+}
+
+/* ホームの旅の札: 写真は札の幅いっぱい、振り返る・削除は札の下に横に並べる（右の列にすると写真が切れる）。写真が無いときは上の箱を出さない */
+.home-item {
+  flex-direction: column;
+}
+.home-open .home-thumb:empty {
+  display: none;
+}
+.home-side {
+  flex-direction: row;
+  border-left: 0;
+  border-top: 1px solid var(--color-border);
+}
+.home-side > * {
+  flex: 1;
+  min-height: 44px;
+  border-radius: 0;
+}
+.home-side > * + * {
+  border-top: 0;
+  border-left: 1px solid var(--color-border);
+}
+
+/* スマホのプランの画面の地図の高さ（ここだけで決める） */
+@media (max-width: 959px) {
+  .plan-view:not(.start-pick) > .map-pane {
+    height: 48svh;
+    min-height: 300px;
+  }
+}
+.home-open > .home-thumb:empty + .home-text,
+.home-open > .home-text:first-child {
+  margin-top: 16px;
+}
+
+/* 場所の札は 1px の枠があるので、札の中の線と番号を 1px 左へ戻し、区間の行の線とまっすぐにそろえる */
+.rt-stop-row > .rt-node > .rt-rail {
+  transform: translateX(-1px);
+}
+
+/* ホーム: 名前の左にペンギン */
+.form-head .wordmark {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.form-head .wordmark .penguin-mark {
+  flex: none;
+}
+
+.home-lead {
+  margin-top: 4px;
+}
+
+/* ホーム: 京都のデモの札は旅の札と同じ形で、旅が無いときは題のすぐ下に置く */
+.home-demo {
+  display: flex;
+  margin-bottom: 28px;
+}
+.home-create .home-demo {
+  margin: 4px 0 0;
+}
+.home-demo .home-open {
+  width: 100%;
+}
+.home-demo .home-meta {
+  color: var(--color-text-secondary);
+}
+.home-demo .home-places {
+  white-space: normal;
+}
+/* 端末の旅の札と同じ写真のときの、写真なしの小さな札 */
+.home-create .home-demo[data-small] {
+  margin-top: 12px;
+}
+.home-demo[data-small] .home-open {
+  padding: 12px 16px;
+}
+.home-demo[data-small] .home-open > .home-text:first-child {
+  margin-top: 0;
+}
+.home-demo[data-small] .home-title {
+  font-size: 15px;
+}
+
+/* 線は札と区間の行の間（4px）と札の枠（1px）でも切らずにつなげる。区間の線は札の外の縁まで、札の中の線は枠の上まで伸ばす */
+.rt-group > .rt-leg > .rt-rail::before {
+  top: -12px;
+  bottom: -12px;
+}
+.rt-end + .rt-group > .rt-leg:first-child > .rt-rail::before {
+  top: -8px;
+}
+.rt-stop-row > .rt-node[data-in] > .rt-rail::before {
+  top: -9px;
+}
+.rt-stop-row > .rt-node[data-out] > .rt-rail::after {
+  bottom: -9px;
+}
+.rt-group > .rt-leg + .rt-end > .rt-rail::before {
+  top: -4px;
+}
+
+/* 徒歩の点は、ひと続きの点線ごとに測った間（--dot-*-step）とずらし（--dot-*-shift）で並べる（lib/walkRail.ts）。測る前は 10px おき */
+.rt-node[data-in='walk'] > .rt-rail::before,
+.rt-leg[data-mode='walk'] > .rt-rail::before {
+  background-size: 6px var(--dot-before-step, 10px);
+  background-position: center var(--dot-before-shift, 0px);
+  background-repeat: repeat-y;
+}
+.rt-node[data-out='walk'] > .rt-rail::after {
+  background-size: 6px var(--dot-after-step, 10px);
+  background-position: center var(--dot-after-shift, 0px);
+  background-repeat: repeat-y;
+}
+
+/* 閉じた「一番楽しみな場所は？」を開き直すボタン（閉じたペンギンの一言を出し直すボタンと同じ形） */
+.fav-back {
+  margin-top: 16px;
+  min-height: var(--tap);
+}

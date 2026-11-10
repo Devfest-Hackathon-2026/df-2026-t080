@@ -1,0 +1,102 @@
+[
+  {
+    "kind": "temple",
+    "text": "Find a carved character on a stone lantern and take a close-up"
+  },
+  {
+    "kind": "temple",
+    "text": "Pick a worn spot on the stone steps and take a close-up"
+  },
+  {
+    "kind": "temple",
+    "text": "Pick one roof-edge tile and photograph its pattern"
+  },
+  {
+    "kind": "temple",
+    "text": "Get close to the spout of the purification fountain and take one photo"
+  },
+  {
+    "kind": "temple",
+    "text": "Find the thickest tree on the grounds and photograph its bark"
+  },
+  {
+    "kind": "street",
+    "text": "Pick one character on a hand-painted sign and take a close-up"
+  },
+  {
+    "kind": "street",
+    "text": "Take a close-up of a street food snack before you eat it"
+  },
+  {
+    "kind": "street",
+    "text": "Get close to an old window frame and photograph the wood grain"
+  },
+  {
+    "kind": "street",
+    "text": "Find a figurine in front of a shop and take a close-up"
+  },
+  {
+    "kind": "street",
+    "text": "Photograph the design on a manhole cover from directly above"
+  },
+  {
+    "kind": "cafe",
+    "text": "Get close to the surface of your drink and take one photo"
+  },
+  {
+    "kind": "cafe",
+    "text": "Pick one dish and take a close-up that shows its pattern"
+  },
+  {
+    "kind": "cafe",
+    "text": "Find something with the shop’s logo and take a close-up"
+  },
+  {
+    "kind": "cafe",
+    "text": "Pick one light in the shop and photograph its shape"
+  },
+  {
+    "kind": "cafe",
+    "text": "Take a close-up of the most delicious-looking part of your food"
+  },
+  {
+    "kind": "park",
+    "text": "Pick one leaf at your feet and photograph its veins up close"
+  },
+  {
+    "kind": "park",
+    "text": "Take a close-up of the most interesting pattern on a tree trunk"
+  },
+  {
+    "kind": "park",
+    "text": "Pick one pebble at your feet and photograph its surface"
+  },
+  {
+    "kind": "park",
+    "text": "Get close to the wood grain of an old bench and take one photo"
+  },
+  {
+    "kind": "park",
+    "text": "Pick one branch and take a close-up of its tip"
+  },
+  {
+    "kind": "culture",
+    "text": "Pick one small item that catches your eye and photograph its pattern"
+  },
+  {
+    "kind": "culture",
+    "text": "Find a well-used tool and photograph its worn spot"
+  },
+  {
+    "kind": "culture",
+    "text": "Get close to the handle of the entrance door and take one photo"
+  },
+  {
+    "kind": "culture",
+    "text": "Take a shop card and photograph it up close"
+  },
+  {
+    "kind": "culture",
+    "text": "Get close to a stair handrail and photograph the wood grain"
+  }
+]

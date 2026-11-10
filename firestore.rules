@@ -1,0 +1,42 @@
+rules_version = '2';
+
+// IntenTrip の旅（data/auth-and-trips.md）。ログインした本人の uid の下だけ、読み書きできる。
+// それ以外の場所は、だれも読み書きできない。
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function isOwner(uid) {
+      return request.auth != null && request.auth.uid == uid;
+    }
+
+    // 旅の項目と大きさ（web/src/lib/trips.ts の TripDoc と LIMITS に合わせる）
+    function validTrip(d) {
+      return d.keys().hasOnly(['v', 'title', 'area', 'date', 'createdAt', 'updatedAt', 'stops', 'lang', 'since', 'state', 'why', 'odai'])
+        && d.keys().hasAll(['v', 'title', 'area', 'date', 'createdAt', 'updatedAt', 'stops', 'lang', 'since', 'state', 'why', 'odai'])
+        && d.v == 1
+        && d.title is string && d.title.size() <= 120
+        && d.area is string && d.area.size() <= 120
+        && d.date is string && d.date.matches('^[0-9]{4}-[0-9]{2}-[0-9]{2}$')
+        && d.createdAt is int && d.updatedAt is int && d.since is int
+        && d.stops is int && d.stops >= 0 && d.stops <= 100
+        && d.lang in ['ja', 'en']
+        && d.state is string && d.state.size() <= 900000
+        && d.why is string && d.why.size() <= 60000
+        && d.odai is string && d.odai.size() <= 60000;
+    }
+
+    match /users/{uid}/trips/{tripId} {
+      allow get, delete: if isOwner(uid);
+      allow list: if isOwner(uid) && request.query.limit <= 50;
+      allow create: if isOwner(uid)
+        && tripId.matches('^[A-Za-z0-9_-]{8,64}$')
+        && validTrip(request.resource.data);
+      allow update: if isOwner(uid)
+        && validTrip(request.resource.data)
+        && request.resource.data.createdAt == resource.data.createdAt;
+    }
+
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

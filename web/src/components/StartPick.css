@@ -1,0 +1,154 @@
+/* 最初の画面。地図と候補だけを出し、選んだ場所でプランを組む */
+.start-pick .panel {
+  padding-bottom: 0;
+}
+/* 何のアプリかの一言と、候補を集めたのは AI だということ（初めての人向け。前半は入力の画面の一言と同じ文） */
+.sp-intro {
+  margin: 0 0 4px;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--ink-2);
+  text-wrap: pretty;
+}
+.sp-lead {
+  margin: 0 0 12px;
+  font-size: 17px;
+  font-weight: 700;
+  line-height: 1.4;
+}
+.sp-none {
+  display: flex;
+  margin: 12px 0 8px;
+}
+.sp-progress {
+  margin: -8px 0 14px;
+}
+.sp-item .pick-row {
+  flex: 1;
+  width: auto;
+  min-width: 0;
+}
+/* 右の印は、押すとその場で選ぶ・外す（行を押すと候補の画面） */
+.sp-check {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: var(--tap);
+  height: var(--tap);
+  margin-right: -8px;
+  padding: 0;
+  border: 0;
+  background: none;
+  cursor: pointer;
+}
+/* 選ぶ前は空の四角。選ぶと塗りに「✓」 */
+.sp-check[aria-checked='false'] .check {
+  border-color: var(--ink-2);
+}
+.sp-check[aria-checked='true'] .check {
+  border-color: var(--route);
+  background: var(--route);
+}
+.sp-check[aria-checked='true'] .check::after {
+  content: '';
+  position: absolute;
+  left: 8px;
+  top: 3px;
+  width: 7px;
+  height: 13px;
+  border: solid var(--on-route);
+  border-width: 0 3px 3px 0;
+  transform: rotate(45deg);
+}
+.pick-group .sp-more {
+  margin: 2px 0 0 -4px;
+  color: var(--route);
+}
+.sp-why {
+  color: var(--route);
+  font-weight: 700;
+}
+/* 選んだ数と名前、プランを作るボタン（一覧の下に貼り付ける） */
+.sp-bar {
+  position: sticky;
+  bottom: 0;
+  z-index: 5;
+  display: grid;
+  gap: 8px;
+  margin: 8px calc(-1 * max(16px, env(safe-area-inset-right, 0px))) 0 calc(-1 * max(16px, env(safe-area-inset-left, 0px)));
+  padding: 12px max(16px, env(safe-area-inset-right, 0px)) calc(12px + env(safe-area-inset-bottom, 0px)) max(16px, env(safe-area-inset-left, 0px));
+  border-top: 1px solid var(--line);
+  background: var(--paper);
+}
+.sp-bar[hidden] {
+  display: none;
+}
+.sp-skip {
+  display: flex;
+  gap: 8px;
+}
+.sp-skip .btn-primary {
+  flex: 1;
+  min-width: 0;
+  padding: 0 8px;
+}
+.sp-skip .btn-line.wide {
+  min-width: 0;
+  min-height: 52px;
+  padding: 0 8px;
+}
+.sp-sum {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  min-width: 0;
+  margin: 0;
+  font-size: 13px;
+}
+.sp-sum .num {
+  flex: none;
+  font-size: 17px;
+  font-weight: 700;
+}
+.sp-names {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--ink-2);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.start-pick .toast {
+  bottom: calc(136px + env(safe-area-inset-bottom, 0px));
+}
+/* マウスで重ねたときは、行を押すと詳細が開くことを名前の下線で示す（ホームの旅の行と同じ形） */
+@media (hover: hover) and (pointer: fine) {
+  .sp-item .pick-row:hover .pick-name {
+    text-decoration: underline;
+    text-underline-offset: 3px;
+  }
+}
+/* 例のエリアの見出しに添える「（例）」（補足の大きさ。エリアの名前を切らずに 1 行に収める） */
+.top-ex {
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0;
+  color: var(--ink-2);
+}
+/* 1 か所ずつ選ぶ物（食事・カフェ）は丸い印。選ぶと真ん中に点 */
+.sp-check[aria-checked='true'] .check.radio::after {
+  left: 6px;
+  top: 6px;
+  width: 12px;
+  height: 12px;
+  border: 0;
+  border-radius: 50%;
+  background: var(--on-route);
+  transform: none;
+}
+/* キーボードで移った候補・「あと N か所を表示」で移った候補を、下の帯の上に出す（狭い画面はページ、広い画面は左の欄が流れる） */
+html:has(.start-pick) {
+  scroll-padding-bottom: calc(150px + env(safe-area-inset-bottom, 0px));
+}
+.start-pick .panel {
+  scroll-padding-bottom: 150px;
+}

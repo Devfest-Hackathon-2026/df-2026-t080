@@ -32,3 +32,8 @@ Thumbs.db
 .vscode/*
 !.vscode/extensions.json
 *.log
+
+# Firebase の Emulator の記録
+firebase-debug.log
+firestore-debug.log
+ui-debug.log

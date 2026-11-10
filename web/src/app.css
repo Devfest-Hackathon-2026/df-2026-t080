@@ -1,0 +1,9 @@
+/* 画面の CSS の入口。層の順: Astryx の reset → 前からの CSS（legacy）→ Astryx の部品 → テーマ → この app の上書き。
+   前からの CSS は Astryx の部品より下の層に置くので、Astryx の部品に前からのクラス名を付けても、見た目は Astryx が決める。 */
+@layer reset, legacy, astryx-base, astryx-theme, app;
+@import '@astryxdesign/core/reset.css';
+@import '@astryxdesign/core/astryx.css';
+@import './styles.css' layer(legacy);
+@import './components/StartPick.css' layer(legacy);
+@import './components/Home.css' layer(legacy);
+@import './astryx-app.css' layer(app);

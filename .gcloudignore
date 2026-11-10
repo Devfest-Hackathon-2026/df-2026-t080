@@ -1,0 +1,12 @@
+.git
+.github
+/data
+**/node_modules
+**/__pycache__
+web/dist
+web/dist-single
+web/*.tsbuildinfo
+server/cache
+server/.venv
+**/.DS_Store
+.gcloudignore

@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <!-- Dark Obsidian Navy Background -->
+  <rect width="512" height="512" rx="128" fill="#0f172a" />
+
+  <!-- Horizontal Transit Bar (Teal) -->
+  <line x1="140" y1="180" x2="372" y2="180" stroke="#0d94a6" stroke-width="56" stroke-linecap="round" />
+
+  <!-- Vertical Transit Bar (White) -->
+  <line x1="256" y1="180" x2="256" y2="370" stroke="#ffffff" stroke-width="56" stroke-linecap="round" />
+
+  <!-- Central Interchange Station Node (Gold & White) -->
+  <circle cx="256" cy="180" r="46" fill="#f59e0b" />
+  <circle cx="256" cy="180" r="26" fill="#ffffff" />
+</svg>
