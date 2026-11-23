@@ -1,10 +1,10 @@
 # ペンギンの一言: プランに合わせた、その日に役立つ注意を Gemini に 3〜5 行書かせる。
+# 服装と天気のことは書かせない（画面の「服装の目安」の札が出す。資料にも入れない）。
 # 資料（facts）は画面がプランから組んで送る。場所の名前や注意点は Gemini や Places から来た文なので、資料としてだけ読ませる
 import json, math, re, unicodedata
 
 MAX_STOPS = 12                         # 資料に入れる場所の数
 MAX_TEXT = 120                         # 資料の文字列 1 つの長さ
-MAX_NOTES = 4                          # 服装の一言の数
 MAX_LINES = 5                          # 返す行の数
 LINE_MAX = {'ja': 100, 'en': 160}      # 返す 1 行の長さ（字）
 
@@ -20,17 +20,16 @@ PROMPT = '''あなたは、旅のプランを見て、その日に役立つ注�
 - sunset は日の入りの時刻。outdoor が true の場所は屋外。dark が true の場所は、日の入りより後に着く屋外の場所。
 - move は前の場所（最初の場所は出発地）からの移動。by は walk 徒歩・car 車・train 電車・bus バス・transit 電車かバス、min は分。end の move は最後の場所からの移動。
 - holiday が true なら土日か祝日。
-- wear は服装の目安。label は服装、feels は予定の時間帯の体感温度の低い方と高い方（℃。何時ごろかは資料に無い）、notes は傘などの一言。
 
 決まり:
 - その日に役立つ注意を 3〜5 行書く。1 行は 1〜2 文で、70 字まで。です・ます で書く。
 - 具体的な時刻と場所の名前を入れる。時刻と分は資料の値をそのまま使い、資料に無い時刻を作らない。場所の名前は資料の名前のまま書く。
 - 資料に無い営業時間・料金・行事・事実は作らない。
-- 大事な順に並べる: 閉まる・開く時刻と着く時刻の兼ね合い → 混む時間 → 日の入りと暗い道 → 予約 → 天気と服装 → 足元・坂・マナー。
+- 大事な順に並べる: 閉まる・開く時刻と着く時刻の兼ね合い → 混む時間 → 日の入りと暗い道 → 予約 → 足元・坂・マナー。
+- 天気・気温・服装・傘のことは書かない（画面の「服装の目安」に出ている）。
 - 混む時間は、crowd が 3 以上の場所だけ書き、着く時刻と比べて書く（混む前に着く・混む時間に重なる など）。時間の幅は「11:00〜17:00」の形で書く。
 - 注意には、旅の人ができることを 1 つ添える。添えてよいのは次の型だけで、資料に当てはまる場所があるときだけ書く。
   - 予約: reserve が true の場所を、予約しておく。
-  - 服装: wear に合わせて、上着・傘などを持つ。
   - 足元: downside に坂・石段・足元のことがある場所で、歩きやすい靴にする。
   - 日の入り: dark が true の場所があるときだけ、暗い道の足元に気を付ける。
   - 混雑: crowd が 3 以上の場所で、時間に余裕をみておく。
@@ -46,7 +45,6 @@ PROMPT = '''あなたは、旅のプランを見て、その日に役立つ注�
 - 〇〇は 16:30 に閉まります。着くのは 15:52 なので、見られるのは 40 分ほどです。
 - 日の入りは 16:41 ごろです。〇〇には暗くなる前に着きます。
 - 〇〇は、予約しておくと安心です。
-- 体感は 13℃ まで下がるので、薄手の上着があると安心です。
 - 〇〇に着く 15:53 は混む時間です。時間に余裕をみておくと安心です。
 - 〇〇に着くのは日の入りの後です。暗い道では足元に気を付けてください。
 {english}
@@ -121,26 +119,6 @@ def flag(v):
     return v if isinstance(v, bool) else None
 
 
-def texts(n):
-    def check(v):
-        if not isinstance(v, list):
-            return None
-        out = [t for t in (text(x) for x in v[:n]) if t]
-        return out or None
-    return check
-
-
-def pair(lo, hi):
-    each = number(lo, hi)
-
-    def check(v):
-        if not isinstance(v, list) or len(v) != 2:
-            return None
-        a, b = each(v[0]), each(v[1])
-        return [a, b] if a is not None and b is not None else None
-    return check
-
-
 def obj(schema):
     """決まった鍵だけを、決まった順に残す（知らない鍵・形の違う値は捨てる）。何も残らなければ None"""
     def check(v):
@@ -164,7 +142,6 @@ STOP = obj({
     'downside': text, 'reserve': flag, 'outdoor': flag, 'dark': flag, 'move': MOVE,
 })
 POINT = obj({'name': text, 'time': clock, 'move': MOVE})
-WEAR = obj({'label': text, 'feels': pair(-60, 60), 'notes': texts(MAX_NOTES)})
 
 
 def stops(v):
@@ -176,7 +153,7 @@ def stops(v):
 
 TOP = obj({
     'date': day, 'weekday': text, 'holiday': flag, 'area': text, 'sunset': clock,
-    'start': POINT, 'end': POINT, 'stops': stops, 'wear': WEAR,
+    'start': POINT, 'end': POINT, 'stops': stops,
 })
 
 

@@ -1,6 +1,5 @@
 import { Card } from '@astryxdesign/core/Card'
 import { PenguinMark } from './CrowdMark'
-import { WeatherCredit } from './WeatherCredit'
 import { tr } from '../lib/i18n'
 
 const T = tr({
@@ -8,7 +7,7 @@ const T = tr({
   en: { title: 'Penguin’s tips', by: 'Written by Gemini' },
 })
 
-// プランに合わせた、その日に役立つ注意（Gemini が書く）。天気も材料に使うので、天気の出典を添える。
+// プランに合わせた、その日に役立つ注意（Gemini が書く）。服装と天気のことは書かせない（服装の目安の札が出す）。
 // 見出しを押すと閉じる・開く（旅のミッションと同じ形）。閉じているときは見出しだけを出す
 export function PenguinNote({ lines, open, onToggle }: { lines: string[]; open: boolean; onToggle: () => void }) {
   return (
@@ -28,7 +27,6 @@ export function PenguinNote({ lines, open, onToggle }: { lines: string[]; open: 
           ))}
         </ul>
         <p className="penguin-by">{T.by}</p>
-        <WeatherCredit />
       </div>
     </Card>
   )

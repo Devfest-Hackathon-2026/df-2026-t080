@@ -21,7 +21,6 @@ def facts(**kw):
             {'name': '試験の洋食屋', 'kind': 'dinner', 'arrive': '17:30', 'depart': '18:10', 'reserve': True,
              'downside': '席が少ない。', 'move': {'by': 'bus', 'min': 15}},
         ],
-        'wear': {'label': '薄手の上着', 'feels': [11, 17], 'notes': ['降水確率30%。折りたたみ傘をおすすめします。']},
     }
     f.update(kw)
     return f
@@ -58,12 +57,14 @@ class CleanTest(unittest.TestCase):
         f['stops'][0]['crowd'] = float('nan')
         f['stops'][0]['untilClose'] = float('inf')
         f['stops'][1]['move']['min'] = True
-        f['wear']['feels'] = [float('-inf'), 17]
         c = penguin.clean(f)
         self.assertNotIn('crowd', c['stops'][0])
         self.assertNotIn('untilClose', c['stops'][0])
         self.assertNotIn('min', c['stops'][1]['move'])
-        self.assertNotIn('feels', c['wear'])
+        # 服装は資料に入れない（前の版の画面が送ってきても落とす）
+        old = penguin.clean(facts(wear={'label': '薄手の上着', 'feels': [11, 17], 'notes': ['降水確率30%。折りたたみ傘をおすすめします。']}))
+        self.assertNotIn('wear', old)
+        self.assertNotIn('薄手の上着', penguin.prompt(old))
         self.assertNotIn('crowd', penguin.clean(facts(stops=[{'name': 'x', 'crowd': 9}]))['stops'][0])
         self.assertEqual(penguin.clean(facts(stops=[{'name': 'x', 'crowd': 2.0}]))['stops'][0]['crowd'], 2)
 

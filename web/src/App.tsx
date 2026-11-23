@@ -1012,11 +1012,11 @@ export default function App() {
       swap: b.filter((id) => !a.includes(id)).length,
     })
   }, [offerAsk, rival.plan, rival.current, plan, current])
-  // ペンギンの一言（届いて閉じていなければ、服装の目安の札の代わりに出す。閉じたら頼まない）
+  // ペンギンの一言（服装の目安の札の下に出す。服装と天気は資料に入れない。閉じたら頼まない）
   const [penguinOff, setPenguinOff] = useState(false)
   const penguinIn = useMemo(
-    () => (data && plan && !penguinOff ? penguinFacts(data, plan, input, date, weather ? wearFor(weather, plan.leave, plan.finish) : null, lang) : null),
-    [data, plan, input, date, weather, penguinOff],
+    () => (data && plan && !penguinOff ? penguinFacts(data, plan, input, date, lang) : null),
+    [data, plan, input, date, lang, penguinOff],
   )
   const penguinLines = usePenguinNote(penguinIn, pending || !current || weatherBusy || tableBusy)
   // ログインしているときは、今のプランを今の旅としてクラウドにも取っておく（場所の数も旅の一覧に出す）
@@ -2798,13 +2798,12 @@ export default function App() {
             />
           )
         )}
+        {/* 服装の目安は、ペンギンの一言を開いていても閉じていても出す（開け閉めで別の札が消えないように） */}
+        {wear && <WearCard wear={wear} />}
         {penguinLines && !penguinOff ? (
           <PenguinNote lines={penguinLines} open onToggle={() => setPenguinOff(true)} />
         ) : (
-          <>
-            {wear && <WearCard wear={wear} />}
-            {penguinOff && hasServer && <PenguinNote lines={[]} open={false} onToggle={() => setPenguinOff(false)} />}
-          </>
+          penguinOff && hasServer && <PenguinNote lines={[]} open={false} onToggle={() => setPenguinOff(false)} />
         )}
         <TripOdai area={data.area.name} date={dateLabel(date)} plan={plan} count={odaiCount} level={odaiLevel} since={tripSince} early={daysUntil(date) > 0} onLevel={(v) => { setOdaiLevel(v); saveLevel(v) }} onOpen={setOpenId} onNotice={notice} />
         {/* 上の「旅のミッション」と同じ形の札。印は ›（その場で開くのではなく、振り返りの画面へ進む） */}

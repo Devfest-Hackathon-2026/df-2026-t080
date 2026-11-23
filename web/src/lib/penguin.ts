@@ -3,7 +3,6 @@
 import { useEffect, useState } from 'react'
 import type { AreaData } from '../types'
 import type { Plan, PlanInput, Stop } from './planner'
-import type { Wear } from './weather'
 import type { Lang } from './i18n'
 import { askPenguin, hasServer } from './api'
 import { afterSunset, isOutdoor, needsReserve } from './caution'
@@ -39,7 +38,6 @@ export type PenguinFacts = {
   start: { name: string; time: string }
   end: { name: string; time: string; move: PenguinMove }
   stops: PenguinStop[]
-  wear?: { label: string; feels?: [number, number]; notes?: string[] }
 }
 
 const MAX_STOPS = 12
@@ -100,8 +98,9 @@ function stopOf(st: Stop, input: PlanInput, date: string): PenguinStop {
   return out
 }
 
+// 服装と天気は入れない（画面の「服装の目安」の札が出す）。
 // プランから資料を組む（数はできるだけ小さく。無い物・当てはまらない物は入れない）
-export function penguinFacts(data: AreaData, plan: Plan, input: PlanInput, date: string, wear: Wear | null, lang: Lang): PenguinFacts {
+export function penguinFacts(data: AreaData, plan: Plan, input: PlanInput, date: string, lang: Lang): PenguinFacts {
   const d = new Date(`${date}T00:00:00`).getDay()
   const here = data.area.lat ? data.area : data.start
   const set = sunsetMin(date, here.lat, here.lng)
@@ -115,11 +114,6 @@ export function penguinFacts(data: AreaData, plan: Plan, input: PlanInput, date:
     stops: plan.stops.slice(0, MAX_STOPS).map((st) => stopOf(st, input, date)),
   }
   if (set !== null) out.sunset = hhmm(set)
-  if (wear) {
-    out.wear = { label: short(wear.label) }
-    if (wear.feels.every(Number.isFinite)) out.wear.feels = wear.feels
-    if (wear.notes.length) out.wear.notes = wear.notes.map((n) => short(n.text))
-  }
   return out
 }
 
