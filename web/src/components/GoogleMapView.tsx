@@ -67,6 +67,8 @@ export function GoogleMapView({ data, plan, focusId, candidates, candId = null, 
   const shifted = useRef<{ line: google.maps.Polyline; coords: LL[]; lane: number }[]>([])
   // 徒歩の点の線と、その拡大での点の形（拡大が変わったら点の大きさを付け直す）
   const dotted = useRef<{ line: google.maps.Polyline; icons: (zoom: number) => google.maps.IconSequence[] }[]>([])
+  // 実線（縁と中の線）と、拡大 1 のときの太さ。拡大が半端なときは地図が線ごと引き伸ばすので、その分を打ち消して同じ太さに見せる
+  const solids = useRef<{ line: google.maps.Polyline; weight: number }[]>([])
   const lastFit = useRef<google.maps.LatLngBounds | null>(null)
   const handMoved = useRef(false)
   const fitted = useRef('')
@@ -207,6 +209,7 @@ export function GoogleMapView({ data, plan, focusId, candidates, candId = null, 
     lines.current = []
     shifted.current = []
     dotted.current = []
+    solids.current = []
     const tint = cssVar('--route', '#0d8492')
     const dark = isDark()
     const land = mapLand(dark)
@@ -227,8 +230,10 @@ export function GoogleMapView({ data, plan, focusId, candidates, candId = null, 
       const z = dim || isBack ? 1 : 3
       const solid = (coords: LL[], color: string, edge: string, grow = 0) => {
         const path = at(coords)
-        add(coords, path, { strokeColor: edge, strokeOpacity: op, strokeWeight: (isBack ? 6 : 7) + grow, zIndex: z })
-        add(coords, path, { strokeColor: color, strokeOpacity: op, strokeWeight: isBack ? 3 : 4, zIndex: z + 1 })
+        const fit = dotFit(zoom)
+        const put = (weight: number, o: google.maps.PolylineOptions) => solids.current.push({ line: add(coords, path, { ...o, strokeOpacity: op, strokeWeight: weight * fit }), weight })
+        put((isBack ? 6 : 7) + grow, { strokeColor: edge, zIndex: z })
+        put(isBack ? 3 : 4, { strokeColor: color, zIndex: z + 1 })
       }
       const icons = (zoom: number): google.maps.IconSequence[] => {
         const k = (isBack ? WALK_BACK : 1) * dotFit(zoom)
@@ -257,7 +262,7 @@ export function GoogleMapView({ data, plan, focusId, candidates, candId = null, 
   }
 
   // 拡大が変わったら、横にずらした線だけを、今の拡大で同じ px だけずれる所へ置き直す（指で広げている途中も、札と同じだけずれる）。
-  // 徒歩の点も、今の拡大に合わせて大きさと間を付け直す
+  // 徒歩の点と実線の太さも、今の拡大に合わせて付け直す
   const reshift = () => {
     const m = map.current
     const zoom = m?.getZoom()
@@ -265,6 +270,8 @@ export function GoogleMapView({ data, plan, focusId, candidates, candId = null, 
     drawnZoom.current = zoom
     for (const s of shifted.current) s.line.setPath(shiftLine(s.coords, s.lane * laneGap(zoom), zoom).map(pos))
     for (const d of dotted.current) d.line.setOptions({ icons: d.icons(zoom) })
+    const fit = dotFit(zoom)
+    for (const l of solids.current) l.line.setOptions({ strokeWeight: l.weight * fit })
   }
 
   useEffect(() => {
