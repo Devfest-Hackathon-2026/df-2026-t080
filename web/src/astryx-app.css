@@ -1689,3 +1689,17 @@ body:has(.route[data-editing]) > .map-float {
 .plan-view {
   touch-action: pan-x pan-y;
 }
+
+/* 縦に並ぶ画面では、地図の上のボタン（凡例・右下の操作・この付近を検索・知らせ）の左右の端を、下の札の端（ページの余白）にそろえる */
+@media (max-width: 959px) {
+  .map-wrap:not(.big) .map-dock {
+    left: var(--map-inset, 16px);
+    right: var(--map-inset, 16px);
+  }
+  .map-wrap:not(.big) .map-search {
+    right: var(--map-inset, 16px);
+  }
+  .map-wrap:not(.big) .route-wait {
+    left: var(--map-inset, 16px);
+  }
+}
