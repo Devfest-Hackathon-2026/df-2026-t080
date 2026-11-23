@@ -17,8 +17,6 @@ import { OsmCredit } from './OsmCredit'
 import { WaitSpots } from './WaitSpots'
 import { DAY_TEXT, NightCount, TripKind } from './DayTabs'
 import { StayTalk } from './StayTalk'
-import { Row } from './Row'
-import { dateLabel, fmt } from '../lib/time'
 import type { Question, Talk } from '../lib/stayTalk'
 import { keepPreview, stepLine } from '../lib/waitSpots'
 
@@ -41,8 +39,6 @@ const T = tr({
     to: '観光を終える場所',
     toHint: '例: 嵐山駅、金閣寺',
     back: '同じ場所に戻る',
-    unset: '未入力' as string,
-    when: '日時' as string,
     looking: '場所を検索しています……',
     miss: '場所が見つかりませんでした。日本の駅名か地名を入力してください。',
     fix: '違う場合は、都道府県名も入力してください。',
@@ -79,8 +75,6 @@ const T = tr({
     to: 'End Sightseeing At',
     toHint: 'e.g. Arashiyama Station, Kinkaku-ji',
     back: 'Return to the same place',
-    unset: 'Not set',
-    when: 'Date & Time',
     looking: 'Finding the place…',
     miss: 'Couldn’t find this place. Enter a station or place in Japan.',
     fix: 'Wrong place? Add the prefecture.',
@@ -265,85 +259,6 @@ export function PlanForm(p: Props) {
       <Switch label={T.car} value={p.car} onChange={(v) => p.onCar(v)} isDisabled={!!p.busy} labelPosition="start" labelSpacing="spread" />
     </div>
   )
-  // 欄の中身。日帰りは 3 つの札に、泊まりを自分で入力するときは「プランを変更」と同じ行の並びに入れる
-  const fromField = (
-          <div className="field">
-            <TextInput
-              containerClassName="big-field"
-              size="lg"
-              label={T.from}
-              htmlName="from"
-              id="from"
-              value={p.from.text}
-              placeholder={T.fromHint}
-              autoComplete="off"
-              enterKeyHint="next"
-              aria-describedby="from-note"
-              onChange={(v) => p.onFrom(v)}
-              onBlur={() => void p.from.lookup()}
-            />
-            <PlaceNote id="from-note" f={p.from} />
-            {!p.from.text.trim() && !p.busy && (
-              <div className="dests" role="group" aria-labelledby="dests-note">
-                <Text as="p" display="block" type="supporting" id="dests-note" className="note">
-                  {T.noDest}
-                </Text>
-                <div className="toggles">
-                  {T.dests.map((d) => (
-                    <Button key={d} variant="secondary" label={d} onClick={() => p.onExample(d, starts[d] ?? null)} />
-                  ))}
-                </div>
-              </div>
-            )}
-          </div>
-  )
-  const wishField = (
-          <div className="field">
-            <TextArea label={T.wish} htmlName="wish" id="wish" rows={3} value={p.wish} placeholder={T.wishHint} onChange={(v) => p.onWish(v)} />
-          </div>
-  )
-  const toBody = (
-    <>
-            <div className="back-row">
-              <CheckboxInput label={T.back} value={p.back} onChange={(on) => p.onBack(on)} />
-            </div>
-            {!p.back && (
-              <>
-                <TextInput
-                  ref={toInput}
-                  containerClassName="big-field"
-                  size="lg"
-                  label={T.to}
-                  isLabelHidden
-                  htmlName="to"
-                  id="to"
-                  value={p.to.text}
-                  placeholder={T.toHint}
-                  autoComplete="off"
-                  enterKeyHint="next"
-                  aria-describedby="to-note"
-                  onChange={(v) => p.onTo(v)}
-                  onBlur={() => void p.to.lookup(near)}
-                />
-                {far ? (
-                  <div className="place-note-box">
-                    <p id="to-note" className="note warn place-note" role="alert">
-                      {FAR_TEXT.far(km)}
-                    </p>
-                  </div>
-                ) : (
-                  <PlaceNote id="to-note" f={p.to} />
-                )}
-              </>
-            )}
-    </>
-  )
-  const timeFields = (
-    <>
-            <TimeRows idPrefix="form" date={p.date} start={p.start} end={p.end} onDate={p.onDate} onStart={p.onStart} onEnd={p.onEnd} oneWay={!p.back || staying} stayTo={staying} onInvalid={onInvalid} />
-            <LeewayField start={p.start} end={p.end} value={p.leeway} onChange={p.onLeeway} oneWay={!p.back || staying} onInvalid={onInvalid} />
-    </>
-  )
   const kindSwitch = (
     <div className="trip-kind">
       <TripKind stay={p.kind !== 'day'} onChange={p.onKind} off={talking && !!p.busy} />
@@ -384,48 +299,97 @@ export function PlanForm(p: Props) {
               {p.formNote}
             </p>
           )}
-          {p.kind === 'form' ? (
-            <>
-              <div className="form-group">
-                {fromField}
-                {wishField}
-              </div>
-              <section className="form-rows">
-                <Row name={T.to} value={p.back ? T.back : p.to.text.trim() || T.unset} open={!p.back}>
-                  <div className="field" role="group" aria-label={T.to}>
-                    {toBody}
-                  </div>
-                </Row>
-                <Row name={T.when} value={`${dateLabel(p.date)}　${fmt(p.start)}〜${fmt(p.end)}`}>
-                  {timeFields}
-                </Row>
-                <Row name={DAY_TEXT.nightsLabel} value={DAY_TEXT.nights(Math.max(2, p.days) - 1)} open>
-                  <div className="field" role="group" aria-label={DAY_TEXT.nightsLabel}>
-                    <NightCount value={Math.max(2, p.days)} onChange={p.onDays} />
-                    <StayFields idPrefix="stay" fields={p.stays} nights={nights} same={p.sameStay} onSame={p.onSameStay} far={stayFar} near={near} />
-                  </div>
-                </Row>
-                {carField}
-              </section>
-            </>
-          ) : (
-            <>
-              <div className="form-group">
-                {fromField}
-                <div className="field" role="group" aria-labelledby="to-label">
-                  <span id="to-label" className="field-label">
-                    {T.to}
-                  </span>
-                  {toBody}
+          <div className="form-group">
+          <div className="field">
+            <TextInput
+              containerClassName="big-field"
+              size="lg"
+              label={T.from}
+              htmlName="from"
+              id="from"
+              value={p.from.text}
+              placeholder={T.fromHint}
+              autoComplete="off"
+              enterKeyHint="next"
+              aria-describedby="from-note"
+              onChange={(v) => p.onFrom(v)}
+              onBlur={() => void p.from.lookup()}
+            />
+            <PlaceNote id="from-note" f={p.from} />
+            {!p.from.text.trim() && !p.busy && (
+              <div className="dests" role="group" aria-labelledby="dests-note">
+                <Text as="p" display="block" type="supporting" id="dests-note" className="note">
+                  {T.noDest}
+                </Text>
+                <div className="toggles">
+                  {T.dests.map((d) => (
+                    <Button key={d} variant="secondary" label={d} onClick={() => p.onExample(d, starts[d] ?? null)} />
+                  ))}
                 </div>
               </div>
-              <div className="form-group">
-                {wishField}
-                {carField}
-              </div>
-              <div className="form-group">{timeFields}</div>
-            </>
+            )}
+          </div>
+
+          <div className="field" role="group" aria-labelledby="to-label">
+            <span id="to-label" className="field-label">
+              {T.to}
+            </span>
+            <div className="back-row">
+              <CheckboxInput label={T.back} value={p.back} onChange={(on) => p.onBack(on)} />
+            </div>
+            {!p.back && (
+              <>
+                <TextInput
+                  ref={toInput}
+                  containerClassName="big-field"
+                  size="lg"
+                  label={T.to}
+                  isLabelHidden
+                  htmlName="to"
+                  id="to"
+                  value={p.to.text}
+                  placeholder={T.toHint}
+                  autoComplete="off"
+                  enterKeyHint="next"
+                  aria-describedby="to-note"
+                  onChange={(v) => p.onTo(v)}
+                  onBlur={() => void p.to.lookup(near)}
+                />
+                {far ? (
+                  <div className="place-note-box">
+                    <p id="to-note" className="note warn place-note" role="alert">
+                      {FAR_TEXT.far(km)}
+                    </p>
+                  </div>
+                ) : (
+                  <PlaceNote id="to-note" f={p.to} />
+                )}
+              </>
+            )}
+          </div>
+          </div>
+
+          <div className="form-group">
+          <div className="field">
+            <TextArea label={T.wish} htmlName="wish" id="wish" rows={3} value={p.wish} placeholder={T.wishHint} onChange={(v) => p.onWish(v)} />
+          </div>
+          {carField}
+          </div>
+
+          <div className="form-group">
+          {p.kind === 'form' && (
+            <div className="field" role="group" aria-labelledby="days-label">
+              <span id="days-label" className="field-label">
+                {DAY_TEXT.nightsLabel}
+              </span>
+              <NightCount value={Math.max(2, p.days)} onChange={p.onDays} />
+              <StayFields idPrefix="stay" fields={p.stays} nights={nights} same={p.sameStay} onSame={p.onSameStay} far={stayFar} near={near} />
+            </div>
           )}
+
+          <TimeRows idPrefix="form" date={p.date} start={p.start} end={p.end} onDate={p.onDate} onStart={p.onStart} onEnd={p.onEnd} oneWay={!p.back || staying} stayTo={staying} onInvalid={onInvalid} />
+          <LeewayField start={p.start} end={p.end} value={p.leeway} onChange={p.onLeeway} oneWay={!p.back || staying} onInvalid={onInvalid} />
+          </div>
 
           {bottom}
           <OsmCredit className="note foot" label={T.search} />

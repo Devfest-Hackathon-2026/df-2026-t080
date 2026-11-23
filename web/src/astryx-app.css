@@ -194,8 +194,7 @@
   display: grid;
   grid-template-columns: 1fr 1fr;
 }
-.sheet .more > .astryx-collapsible-trigger,
-.form-rows .more > .astryx-collapsible-trigger {
+.sheet .more > .astryx-collapsible-trigger {
   min-height: var(--tap);
   font-size: var(--text-body-size);
   font-weight: 700;
@@ -204,12 +203,24 @@
   margin-top: 12px;
 }
 /* 「プランを変更」の行: 名前の右に今の値を出し、押すとその場で開く。行の間は細い線 */
-.adjust-rows .more + .more,
-.form-rows > * + * {
+.adjust-rows .more + .more {
   border-top: 1px solid var(--line);
 }
-.sheet .more .more-label,
-.form-rows .more .more-label {
+/* 日時は行にまとめず、最初から開いた形で見せる。下の行との間は、行どうしと同じ細い線 */
+.adjust-rows .adjust-when {
+  display: grid;
+  gap: 12px;
+  padding: 12px 0 16px;
+}
+.adjust-rows .adjust-when + .more {
+  border-top: 1px solid var(--line);
+}
+.sheet .adjust-when-title {
+  margin: 0;
+  font-size: var(--text-body-size);
+  font-weight: 700;
+}
+.sheet .more .more-label {
   display: flex;
   flex: 1;
   align-items: baseline;
@@ -217,12 +228,10 @@
   gap: 12px;
   min-width: 0;
 }
-.sheet .more .more-name,
-.form-rows .more .more-name {
+.sheet .more .more-name {
   flex: none;
 }
-.sheet .more .more-sum,
-.form-rows .more .more-sum {
+.sheet .more .more-sum {
   min-width: 0;
   overflow: hidden;
   color: var(--ink-2);
@@ -232,8 +241,7 @@
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.sheet .more .more-body,
-.form-rows .more .more-body {
+.sheet .more .more-body {
   display: grid;
   gap: 12px;
   padding: 4px 0 16px;

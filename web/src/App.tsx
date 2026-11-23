@@ -2824,8 +2824,6 @@ export default function App() {
             />
           )
         )}
-        {nudgeSince > 0 && nudgeSince === tripSince && <SaveNudge since={nudgeSince} />}
-
         {penguinLines && !penguinOff ? (
           <PenguinNote lines={penguinLines} open onToggle={() => setPenguinOff(true)} />
         ) : (
@@ -2841,6 +2839,8 @@ export default function App() {
             {T.recapOpen}
           </button>
         </section>
+        {/* ログインの勧めは、プランの中身を全部見せた後（一番下）に出す */}
+        {nudgeSince > 0 && nudgeSince === tripSince && <SaveNudge since={nudgeSince} />}
 
         <footer className="plan-foot">
           <p className="note foot">

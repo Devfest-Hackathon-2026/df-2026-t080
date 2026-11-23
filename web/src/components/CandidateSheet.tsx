@@ -83,7 +83,7 @@ export function CandidateSheet({
     }
     onAdd?.(spot.id)
   }
-  // 食事とカフェは、メニューと口コミを見に行くリンクを、特徴と注意点のすぐ下に出す（ほかの場所は画面の下）
+  // 食事とカフェは、Google マップへのリンクを、特徴と注意点のすぐ下に出す（ほかの場所は画面の下）
   const eats = spot.kind === 'food' || spot.kind === 'cafe'
   const mapsLink = (
     <div className="link-row">
@@ -92,7 +92,7 @@ export function CandidateSheet({
         web={place.info?.mapsUri || mapsPlaceUrl(searchName(spot), searchName(data.area))}
         app={mapsAppPlaceUrl(searchName(spot), searchName(data.area))}
       >
-        {eats ? W.mapsMenu : W.maps}
+        {W.maps}
       </MapsLink>
     </div>
   )

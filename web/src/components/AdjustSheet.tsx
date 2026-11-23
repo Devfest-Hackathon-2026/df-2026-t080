@@ -1,5 +1,6 @@
-import { useState } from 'react'
+import { useState, type ReactNode } from 'react'
 import { Button } from '@astryxdesign/core/Button'
+import { Collapsible } from '@astryxdesign/core/Collapsible'
 import { Heading } from '@astryxdesign/core/Heading'
 import { SegmentedControl, SegmentedControlItem } from '@astryxdesign/core/SegmentedControl'
 import { Switch } from '@astryxdesign/core/Switch'
@@ -9,13 +10,11 @@ import { ToggleButton } from '@astryxdesign/core/ToggleButton'
 import type { AreaData, Condition, Spot } from '../types'
 import type { Pace } from '../lib/planner'
 import { Sheet } from './Sheet'
-import { Row } from './Row'
 import { LeewayField, TimeRows } from './TimeRows'
 import { tr } from '../lib/i18n'
 import { PenguinMark } from './CrowdMark'
 import { type OdaiLevel } from '../lib/odai'
 import { DAY_TEXT, DayCount } from './DayTabs'
-import { dateLabel, fmt } from '../lib/time'
 import { StayFields } from './PlanForm'
 import type { PlaceField } from '../lib/placeField'
 
@@ -150,6 +149,24 @@ const T = tr({
   },
 })
 
+// 変えられる物の 1 行。名前の右に今の値を出し、押すとその場で開く
+function Row({ name, value, open = false, children }: { name: string; value: string; open?: boolean; children: ReactNode }) {
+  return (
+    <Collapsible
+      className="more"
+      defaultIsOpen={open}
+      trigger={
+        <span className="more-label">
+          <span className="more-name">{name}</span>
+          <span className="more-sum num">{value}</span>
+        </span>
+      }
+    >
+      <div className="more-body">{children}</div>
+    </Collapsible>
+  )
+}
+
 export function AdjustSheet(p: Props) {
   const [text, setText] = useState('')
   const [busy, setBusy] = useState(false)
@@ -230,7 +247,11 @@ export function AdjustSheet(p: Props) {
       )}
 
       <section className="sheet-sec adjust-rows">
-        <Row name={staying ? T.dayWhen(p.dayNo ?? 1) : T.when} value={`${dateLabel(p.date)}　${fmt(p.start)}〜${fmt(p.end)}`} open={!p.onAsk}>
+        {/* 日時は、開かなくても最初から見せる（行にまとめない） */}
+        <div className="adjust-when" role="group" aria-labelledby="adjust-when-title">
+          <Heading level={3} id="adjust-when-title" className="more-name adjust-when-title">
+            {staying ? T.dayWhen(p.dayNo ?? 1) : T.when}
+          </Heading>
           <TimeRows idPrefix="adj" date={p.date} start={p.start} end={p.end} onDate={p.onDate} onStart={p.onStart} onEnd={p.onEnd} startName={p.data.start.name} endName={p.data.end?.name} oneWay={!!p.data.end} stayFrom={p.stayEnds?.from} stayTo={p.stayEnds?.to} />
           <LeewayField start={p.start} end={p.end} value={p.leeway} onChange={p.onLeeway} oneWay={!!p.data.end || !!p.stayEnds?.to} />
           {p.car && (
@@ -238,7 +259,7 @@ export function AdjustSheet(p: Props) {
               <Switch label={T.car} value={p.car.on} onChange={(v) => p.car!.onChange(v)} labelPosition="start" labelSpacing="spread" />
             </div>
           )}
-        </Row>
+        </div>
         {p.days && (
           <Row name={DAY_TEXT.count} value={staying ? DAY_TEXT.nights(p.days.planned - 1) : T.dayTrip}>
             <div className="trip-days" role="group" aria-label={DAY_TEXT.count}>

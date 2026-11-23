@@ -8,7 +8,7 @@ DevFest GDGoC Japan Hackathon 2026 ／ テーマ「Own the Why, Build with Inten
 |---|---|
 | **デプロイした作品** | https://intentrip-29919508404.asia-northeast1.run.app/ （Google Cloud Run。Demo Day〔11/27〕まで動かし続ける） |
 | **まず試すには** | 開いて「京都のデモを試す」を押す（ログイン・設定は要らない）。直リンクは https://intentrip-29919508404.asia-northeast1.run.app/?example |
-| **この内容の元** | 開発用リポジトリの最終コミット `162d26f1fe` |
+| **この内容の元** | 開発用リポジトリの最終コミット `f393bad414` |
 | **メンバー** | [@v76nl](https://github.com/v76nl)・[@Omupp](https://github.com/Omupp)・[@Shichimi555](https://github.com/Shichimi555)・[@karinkamonohashi](https://github.com/karinkamonohashi) |
 
 ## 何を解決するか

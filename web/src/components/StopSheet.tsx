@@ -188,7 +188,7 @@ export function StopSheet({ data, stop, index, plan, input, onClose, onPeek, onS
             web={place.info?.mapsUri || mapsPlaceUrl(searchName(s), searchName(data.area))}
             app={mapsAppPlaceUrl(searchName(s), searchName(data.area))}
           >
-            {s.kind === 'food' || s.kind === 'cafe' ? W.mapsMenu : W.maps}
+            {W.maps}
           </MapsLink>
         </div>
         {s.verified === false && (
