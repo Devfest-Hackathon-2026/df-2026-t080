@@ -140,6 +140,36 @@ class MergeTest(unittest.TestCase):
         for a, b in (('Face Records', 'Face Records 渋谷店'), ('SPBS', 'SPBS 本店'), ('白髭のシュークリーム工房', '白髭のシュークリーム工房 代田店')):
             self.assertEqual(len(places.merge_places([self.place(a), self.place(b)])), 1, (a, b))
 
+    def test_okinawa_name_variants_are_merged(self):
+        a = self.place('那覇国際通り商店街', 'street', lat=26.2155, lng=127.6853)
+        b = self.place('国際通リ', 'street', lat=26.2157, lng=127.68642)
+        self.assertEqual([p['name'] for p in places.merge_places([a, b])], ['那覇国際通り商店街'])
+        c = self.place('首里金城町石畳道', 'street', lat=26.2155, lng=127.7158)
+        d = self.place('金城町石畳道', 'sight', lat=26.2160, lng=127.71522)
+        self.assertEqual([p['name'] for p in places.merge_places([c, d])], ['首里金城町石畳道'])
+
+    def test_long_streets_are_merged_a_little_farther(self):
+        a = self.place('那覇国際通り商店街', 'street', lat=26.21381, lng=127.68086)
+        b = self.place('国際通リ', 'street', lat=26.2157, lng=127.68642)
+        self.assertEqual(len(places.merge_places([a, b])), 1)
+        c, d = self.place('首里城', lat=26.21381, lng=127.68086), self.place('首里城公園', lat=26.2157, lng=127.68642)
+        self.assertEqual(len(places.merge_places([c, d])), 2)
+
+    def test_wish_places_replace_renamed_candidates(self):
+        wish = [self.place('那覇国際通り商店街', 'street', lat=26.2155, lng=127.6853)]
+        area = [self.place('国際通リ', 'street', lat=26.2157, lng=127.68642), self.place('国際通り屋台村', 'food', lat=26.2153, lng=127.6857),
+                self.place('那覇国際通り商店街', 'street', lat=26.2155, lng=127.6853)]
+        self.assertEqual([p['name'] for p in places.with_wish(wish, area)], ['那覇国際通り商店街', '国際通り屋台村'])
+        self.assertEqual(places.with_wish([], area), area)
+
+    def test_okinawa_neighbours_are_kept(self):
+        pairs = ((('国際通り', 'street'), ('国際通り屋台村', 'food')), (('国際通り', 'street'), ('国際通り屋台村', 'street')),
+                 (('波の上ビーチ', 'sight'), ('波の上うみそら公園', 'sight')), (('牧志', 'street'), ('牧志公設市場', 'sight')),
+                 (('表参道', 'street'), ('表参道ヒルズ', 'sight')), (('平和通り', 'street'), ('平和通り商店街前', 'sight')),
+                 (('待乳山聖天', 'sight'), ('待乳山聖天公園', 'sight')))
+        for (an, ak), (bn, bk) in pairs:
+            self.assertEqual(len(places.merge_places([self.place(an, ak), self.place(bn, bk)])), 2, (an, bn))
+
     def test_old_and_new_kanji_are_the_same_name(self):
         a, b = self.place('融民芸店'), self.place('融民藝店')
         self.assertEqual([p['name'] for p in places.merge_places([a, b])], ['融民芸店'])

@@ -68,6 +68,8 @@ function inertOutside(layer: Element | null): HTMLElement[] {
 // grow になったら、card でも狭い画面で高さいっぱいに広げる（読み取った結果など、下まで見てほしい物が出たとき）
 // grow に数を渡したときは、数が変わるたびに広げる（押すたびに広げるボタン）。
 // closeLabel は、閉じるボタン（×）の読み上げの名前（中の変更がすぐ入るシートは「完了」）
+// 読み上げには、card のシートも「場所を追加・削除」などと同じ、閉じるまで手前にある画面（aria-modal）として伝える。
+// 外の地図は指では触れるが、読み上げで外へ出るのはシートを閉じてから（場所と道は、シートを閉じた一覧で読める）
 export function Sheet({
   title,
   lead,
@@ -152,7 +154,7 @@ export function Sheet({
         className={card ? 'sheet card' : 'sheet'}
         data-size={card ? (full ? 'full' : 'peek') : undefined}
         role="dialog"
-        aria-modal={card ? undefined : true}
+        aria-modal="true"
         aria-labelledby="sheet-title"
         tabIndex={-1}
         ref={ref}

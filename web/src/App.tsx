@@ -3,25 +3,24 @@ import { Icon } from '@astryxdesign/core/Icon'
 import { Card } from '@astryxdesign/core/Card'
 import { Heading } from '@astryxdesign/core/Heading'
 import { Text } from '@astryxdesign/core/Text'
-import { Suspense, lazy, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { Suspense, lazy, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import type { AreaData, BusTrip, Condition, GeoHit, Point, Spot, TransitRoute, TransitTable, TripPoint } from './types'
 import { nearCandidates, ROLE_TEXT, type BaseItem, type Pace, type Plan, type PlanInput, type Slot, type Stop, type TimeNote } from './lib/planner'
 import { usePlan } from './lib/usePlan'
 import { addFound, applyAdjust, looseOf, type AdjustState } from './lib/adjust'
 import { useSlopes } from './lib/slope'
-import { askAdjust, hasServer, loadMatrix, pollJob, startJob, tripOf, type AdjustOp, type AdjustReply, type JobState, type TripAsk } from './lib/api'
-import { usePlaceField, type PlaceField } from './lib/placeField'
+import { askAdjust, askTrip, hasServer, loadMatrix, pollJob, startJob, tripOf, type AdjustOp, type AdjustReply, type JobState, type TripAsk } from './lib/api'
+import { nearOf, usePlaceField, type PlaceField } from './lib/placeField'
 import { fetchWeather, wearFor, weatherLabel, weatherSky, type Weather } from './lib/weather'
 import { dateLabel, fmt, fmtDur, isHoliday, isoDate, nextSaturday } from './lib/time'
 import { GoogleMapView, MapView } from './components/LazyMap'
 import { hasGoogleMaps, onMapsUnavailable } from './lib/gmaps'
-import { CrowdSwap } from './components/CrowdSwap'
+import { CrowdSwap, CrowdSwapSheet } from './components/CrowdSwap'
 import { Compare } from './components/Compare'
 import { FavAsk } from './components/FavAsk'
 import { WearCard } from './components/WearCard'
 import { daysUntil } from './lib/highlight'
 import { PenguinNote } from './components/PenguinNote'
-import { PenguinMark } from './components/CrowdMark'
 import { penguinFacts, usePenguinNote } from './lib/penguin'
 import { OsmCredit } from './components/OsmCredit'
 import { ElevCredit } from './components/ElevCredit'
@@ -37,24 +36,30 @@ import { areaBox, busName, busRoute, fetchBus, isTrain, loadBusInfo, mergeSource
 import { BusCredit } from './components/BusCredit'
 import { syncBusLines } from './lib/busLines'
 import { distM, goalId, goalOf, legKey, mapsDirUrl, mapsTourUrl, tableIds, tablePoints, type Leg, type LegMode } from './lib/geo'
-import { fetchBusTable } from './lib/busTable'
+import { fetchBusTable, type BusTable } from './lib/busTable'
 import { sunsetMin } from './lib/sun'
 import { StopSheet } from './components/StopSheet'
-import { GeminiMark } from './components/GeminiMark'
+import { Sheet } from './components/Sheet'
+import { GeminiMark, SparkIcon } from './components/GeminiMark'
 import { CandidateSheet } from './components/CandidateSheet'
 import { TripOdai } from './components/Odai'
 import { ShareMenu } from './components/ShareMenu'
 import { readCount, readLevel, saveCount, saveLevel, type OdaiLevel } from './lib/odai'
 import { clearSaved, readOtherSaved, readSaved, writeSaved, type FocusAdd, type Pin, type Saved } from './lib/saved'
-import { noteStops, onTripNew, onTripOpen, queueCloudSave, startCloudSync, tripTitle } from './lib/trips'
-import { MAX_TRIP_KM, PlanForm } from './components/PlanForm'
+import { canSkip, dayWants, fitDays, fitEnd, joinWish, mergeTalk, nextQuestion, stayFieldsOf, talkReady, wantsOf, type Question, type Talk, type TripWants } from './lib/stayTalk'
+import { LIMITS, noteStops, onTripNew, onTripOpen, queueCloudSave, reopenCurrent, startCloudSync, tripTitle, untouchedDemo } from './lib/trips'
+import { addCarry, addDay as addDayTo, addDayAsk, allDays, dropCarried, usedWith, withCarry, canAddDay, DAYS_MAX, dayIndex, dayStopIds, dropUsed, nextDate, plannedDays, removeDay, stayEnds, switchDay, tabDates, stayTitle, tripGoal, usedPlaces, withStays, hasStay, nightStay, trimStays, dayGoal, stayTrip, metWishes, quietMet, type Stays } from './lib/days'
+import { CarryLine, DAY_TEXT, DayStatus, DayTabs } from './components/DayTabs'
+import { PlanForm, SearchWait, showSearchWait } from './components/PlanForm'
+import { MAX_TRIP_KM, shownNights, stayFarTexts } from './lib/stayFar'
 import { WeatherIcon } from './components/WeatherIcon'
 import { StartPick, type Picked } from './components/StartPick'
 import { DemoOwn } from './components/DemoOwn'
 import { LegModeSheet } from './components/LegMode'
+import { mentionsCar } from './lib/carTrip'
 import { Home } from './components/Home'
-import { homeBelow, useScreenBack } from './lib/backStack'
-import { useViewScroll } from './lib/viewScroll'
+import { homeBelow, useBackClose, useScreenBack } from './lib/backStack'
+import { keepScroll, useViewScroll } from './lib/viewScroll'
 import { askExample, clearRecapOnOpen, exampleAsked, openAfterLang, recapOnOpen } from './lib/homeIntent'
 import { HomeButton } from './components/HomeButton'
 import { SaveNudge } from './components/SaveNudge'
@@ -72,11 +77,12 @@ const T = tr({
   ja: {
     shareRide: (train: boolean, m: number) => `${train ? '電車' : 'バス'} ${m}分`,
     more: (two: string[], n: number) => `${two.join('・')}ほか${n}か所`,
-    tableFixed: '時刻表に合わせて移動時間を直しました',
-    railFixed: '電車の路線に合わせて移動時間を直しました',
+    farWish: (n: string) => `${n}は遠いため、追加できませんでした`,
+    tableFixed: '時刻表に合わせて移動時間を更新しました',
+    railFixed: '電車の路線に合わせて移動時間を更新しました',
     quotaPlan: 'Gemini の利用上限に近いため、プランを作成できません。しばらくしてから、もう一度お試しください。',
     offline: 'サーバーに接続できませんでした。通信状況を確認して、もう一度お試しください。',
-    noPlaces: '候補を集められませんでした。場所を変えて、もう一度お試しください。',
+    noPlaces: '候補を取得できませんでした。場所を変えて、もう一度お試しください。',
     offer: 'より良い案があります',
     offerCrowd: (d: string, less: boolean) => `混雑する場所にいる時間が${d}${less ? '短く' : '長く'}なります`,
     offerMove: (d: string, less: boolean) => `移動の時間が${d}${less ? '短く' : '長く'}なります`,
@@ -84,45 +90,51 @@ const T = tr({
     offerSwap: (n: number) => `${n}か所が入れ替わります`,
     offerJoin: (parts: string[]) => `${parts.join('。')}。`,
     offerTake: '入れ替える',
-    offerKeep: 'このまま',
+    offerKeep: '変更しない',
     offerTaken: 'プランを入れ替えました',
-    same: 'プランは変わりませんでした',
+    same: 'プランは変更されませんでした',
     moveUp: (d: string, after: string) => `${/[。！？]$/.test(after) ? '' : '。'}移動の時間が${d}長くなりました`,
-    dropped: '時間に合わせて{n}を外しました',
-    filled: '空いた時間に{n}を入れました',
-    mealSwap: (label: string) => `${label}を{a}から{b}に替えました`,
-    moreMoved: (n: number) => `ほかに${n}か所が変わりました`,
+    dropped: '時間に合わせて{n}を削除しました',
+    filled: '空いた時間に{n}を追加しました',
+    mealSwap: (label: string) => `${label}を{a}から{b}に変更しました`,
+    moreMoved: (n: number) => `ほかに${n}か所が変更されました`,
     moreChanges: (n: number) => `ほかの変更（${n}件）`,
-    fillMore: '空いた時間に場所を足す',
-    fillDone: '空いた時間に場所を足しました',
+    fillMore: '空いた時間に場所を追加',
+    fillDone: '空いた時間に場所を追加しました',
     changedTo: '{n}に変更しました',
-    removed: '{n}をプランから外しました',
-    moved: (k: number) => `{n}を${k}番目にしました`,
-    paceMany: '滞在を短くし、ゆとりを外しました',
+    removed: '{n}をプランから削除しました',
+    moved: (k: number) => `{n}を${k}番目に移動しました`,
+    paceMany: '滞在を短くし、ゆとりをなくしました',
     paceSlow: '滞在とゆとりを長くしました',
-    paceNormal: '見どころの滞在とゆとりを、ふつうに戻しました',
-    moveLessOn: '移動を減らして組み直しました',
-    moveLessOff: '移動の少なさを優先するのをやめました',
-    calmOn: '混雑を避けて組み直しました',
-    calmOff: '混雑の避け方を、ふつうに戻しました',
+    paceNormal: '見どころの滞在とゆとりを、標準に戻しました',
+    moveLessOn: '移動を減らしてプランを更新しました',
+    carOn: '車で回るようにプランを更新しました',
+    carOff: '徒歩と電車・バスで回るようにプランを更新しました',
+    moveLessOff: '移動を減らす設定をオフにしました',
+    calmOn: '混雑を避けてプランを更新しました',
+    calmOff: '混雑の避け方を、標準に戻しました',
     stayAt: (d: string) => `滞在を${d}にしました`,
-    stayAuto: '滞在の長さをおまかせに戻しました',
+    stayAuto: '滞在の長さを自動に戻しました',
     districtBack: '{n}を回る地区に戻しました',
     slotTo: (label: string) => `${label}を{n}に変更しました`,
-    added: '{n}をプランに入れました',
-    focusOff: 'この近くを優先するのをやめました',
-    gone: '{n}を外しました',
+    added: '{n}をプランに追加しました',
+    focusOff: 'この近くの優先をオフにしました',
+    gone: '{n}を削除しました',
     putBack: '{n}をプランに戻しました',
     noNear: 'この近くに追加できる場所はありません',
-    nearAdded: '{n}を入れました',
+    nearAdded: '{n}を追加しました',
     districts: '回る地区を変更しました',
-    quotaAsk: 'Gemini の利用上限に近いため、頼めません。しばらくしてから、もう一度お試しください。',
-    finding: '候補を探しています……（30〜40 秒）',
-    findFailed: '新しい候補を探せませんでした。言い方を変えて、もう一度お試しください。',
-    noneFound: '頼みに合う新しい候補は見つかりませんでした。',
-    foundAdded: '{n}を見つけて、プランに入れました',
-    askFailed: '頼みを読み取れませんでした。言い方を変えて、もう一度お試しください。',
-    nothing: '変更できる所が見つかりませんでした。',
+    quotaAsk: 'Gemini の利用上限に近いため、今は頼めません。しばらくしてから、もう一度お試しください。',
+    finding: '候補を検索しています……（30〜40秒）',
+    findFailed: '新しい候補を検索できませんでした。別の言い方で、もう一度お試しください。',
+    noneFound: '条件に合う新しい候補は見つかりませんでした。',
+    foundAdded: '{n}をプランに追加しました',
+    askFailed: '頼んだ内容を認識できませんでした。別の言い方で、もう一度お試しください。',
+    talkQuota: 'Gemini の利用上限に近いため、欄に入力してください。',
+    talkOffline: 'サーバーに接続できないため、欄に入力してください。',
+    talkFailed: 'Gemini で読み取れなかったため、欄に入力してください。',
+    talkEmpty: '読み取れませんでした。別の言い方で書いてください。',
+    nothing: '変更できる箇所が見つかりませんでした。',
     changed: 'プランを変更しました',
     shareDepart: (n: string) => `${n}を出発`,
     down: '　↓ ',
@@ -133,12 +145,13 @@ const T = tr({
     shareTitle: (a: string) => `${a}のプラン`,
     copied: 'プランをコピーしました',
     copyFailed: 'プランをコピーできませんでした',
-    findingMore: 'ほかの候補を探しています……',
+    findingMore: 'ほかの候補を検索しています……',
     partial: '一部の候補を取得できませんでした。',
     back: '戻る',
     backToPlan: 'プランに戻る',
+    plan: 'プラン',
     adjust: 'Gemini に頼む',
-    adjustPlain: '条件を変える',
+    adjustPlain: '条件を変更',
     home: '自分の旅',
     making: 'プランを作成しています……',
     summary: '概要',
@@ -156,36 +169,43 @@ const T = tr({
     sep: '・',
     late: (d: string, oneWay: boolean, t: string) => `${oneWay ? '設定した到着' : '希望の帰る時刻'}（${t}）より${d}${oneWay ? '遅れます' : '遅くなります'}。`,
     early: (d: string, oneWay: boolean, t: string) => `${oneWay ? '設定した到着' : '帰る時刻'}（${t}）まで${d}あります`,
-    fitAsk: '入りきりません。どれを外しますか？',
-    fitDrop: (n: string) => `${n}を外す`,
-    wishFit: (w: string, n: number) => `希望の「${w}」に合う場所を${n}か所入れました。`,
-    wishMax: 40,
-    cut: '……',
+    fitAsk: '時間内に収まりません。どの場所を削除しますか？',
+    fitDrop: (n: string) => `${n}を削除`,
+    wishFitN: (n: number) => `希望に合う場所を${n}か所追加しました`,
+    fillShort: '場所を追加',
+    listSep: '、',
+    fitAskNext: (d: number) => `時間内に収まりません。${d}日目以降に回す場所を選んでください。`,
+    fitCarry: (n: string, d: number) => `${n}を${d}日目以降に回す`,
+    carriedOne: (d: number) => `{n}を${d}日目以降に回しました`,
+    carried: (n: number, d: number) => `${n}か所を${d}日目以降に回しました`,
+    carriedLast: (n: number) => `${n}か所が入りきりませんでした`,
     schedule: 'スケジュール',
-    pick: '場所を足す・外す',
+    pick: '場所を追加・削除',
     editOrder: '並べ替え',
     doneOrder: '完了',
-    footMore: 'ほかの候補を探しています。より良い案が見つかったら、入れ替えるかを聞きます。',
+    footMore: 'ほかの候補を検索しています。より良い案が見つかった場合は、入れ替えるかどうかを確認します。',
     footChecking: '地図で位置を確認しています。',
     footPartial: '一部の候補を取得できませんでした。',
     footEstimate: '電車・バスの時間は目安です。',
+    footCar: '車の時間は目安です。',
     osmRail: '経路・位置・電車の路線と駅:',
-    busAdded: (t: string) => `${t}発の{n}を入れました`,
-    busRemoved: '便を外しました',
-    routeAdded: '経路を入れました',
-    routeRemoved: '入れた経路を外しました',
-    legWalk: 'この区間を歩くようにしました',
-    legTransit: 'この区間を電車・バスにしました',
+    busAdded: (t: string) => `${t}発の{n}を選択しました`,
+    busRemoved: '便の選択を解除しました',
+    routeAdded: '経路を追加しました',
+    routeRemoved: '追加した経路を削除しました',
+    legWalk: 'この区間を徒歩に変更しました',
+    legTransit: 'この区間を電車・バスに変更しました',
+    legCar: 'この区間を車に変更しました',
     legAuto: 'この区間の手段を自動に戻しました',
     undo: '元に戻す',
     recap: '旅の振り返り',
     recapOpen: '旅を振り返る',
-    penguinBack: 'ペンギンの一言を見る',
-    favBack: '一番楽しみな場所を選ぶ',
+    favBack: '一番楽しみな場所を選択',
   },
   en: {
     shareRide: (train: boolean, m: number) => `${train ? 'Train' : 'Bus'} ${m} min`,
     more: (two: string[], n: number) => `${two.join(', ')}, and ${n} more`,
+    farWish: (n: string) => `Couldn’t add ${n} because it’s too far`,
     tableFixed: 'Travel times now match the timetables',
     railFixed: 'Travel times now match the rail lines',
     quotaPlan: 'Gemini is near its usage limit, so a plan can’t be created now. Please try again later.',
@@ -216,6 +236,8 @@ const T = tr({
     paceSlow: 'Lengthened stays at sights and buffers for a slower pace',
     paceNormal: 'Stays at sights and buffers are back to normal',
     moveLessOn: 'Rebuilt the plan with less travel',
+    carOn: 'Rebuilt the plan to get around by car',
+    carOff: 'Rebuilt the plan to get around on foot and by transit',
     moveLessOff: 'No longer prioritizing less travel',
     calmOn: 'Rebuilt the plan to avoid more crowds',
     calmOff: 'Crowd avoidance is back to normal',
@@ -236,6 +258,10 @@ const T = tr({
     noneFound: 'No new places matched your request.',
     foundAdded: 'Found {n} and added to the plan',
     askFailed: 'Couldn’t understand your request. Try wording it differently.',
+    talkQuota: 'Gemini is near its usage limit. Enter your trip below.',
+    talkOffline: 'Couldn’t connect to the server. Enter your trip below.',
+    talkFailed: 'Gemini couldn’t read your trip. Enter it below.',
+    talkEmpty: 'Couldn’t read that. Try writing it another way.',
     nothing: 'Nothing could be changed.',
     changed: 'Changed the plan',
     shareDepart: (n: string) => `Depart ${n}`,
@@ -251,6 +277,7 @@ const T = tr({
     partial: 'Some places couldn’t be loaded.',
     back: 'Back',
     backToPlan: 'Back to Plan',
+    plan: 'Plan',
     adjust: 'Ask Gemini',
     adjustPlain: 'Change Conditions',
     home: 'Your Trips',
@@ -272,9 +299,14 @@ const T = tr({
     early: (d: string, oneWay: boolean, t: string) => `${d} to spare before your ${oneWay ? 'arrival' : 'return'} time (${t})`,
     fitAsk: 'Not everything fits. Which place should go?',
     fitDrop: (n: string) => `Remove ${n}`,
-    wishFit: (w: string, n: number) => `${n} ${n === 1 ? 'place matches' : 'places match'} your wish, “${w}”.`,
-    wishMax: 80,
-    cut: '…',
+    wishFitN: (n: number) => `Added ${n} ${n === 1 ? 'place' : 'places'} that ${n === 1 ? 'matches' : 'match'} your wish`,
+    fillShort: 'Add Places',
+    listSep: ', ',
+    fitAskNext: (d: number) => `Not everything fits. Choose places to move to Day ${d} or later.`,
+    fitCarry: (n: string, d: number) => `Move ${n} to Day ${d} or later`,
+    carriedOne: (d: number) => `Moved {n} to Day ${d} or later`,
+    carried: (n: number, d: number) => `Moved ${n} ${n === 1 ? 'place' : 'places'} to Day ${d} or later`,
+    carriedLast: (n: number) => `${n} ${n === 1 ? 'place' : 'places'} didn’t fit`,
     schedule: 'Schedule',
     pick: 'Add or Remove Places',
     editOrder: 'Reorder',
@@ -283,6 +315,7 @@ const T = tr({
     footChecking: 'Checking locations on the map. ',
     footPartial: 'Some places couldn’t be loaded. ',
     footEstimate: 'Train and bus times are estimates.',
+    footCar: 'Driving times are estimates.',
     osmRail: 'Routes, locations, rail lines, and stations:',
     busAdded: (t: string) => `Added the ${t} {n}`,
     busRemoved: 'Removed the departure',
@@ -290,11 +323,11 @@ const T = tr({
     routeRemoved: 'Removed the added route',
     legWalk: 'You’ll walk this part',
     legTransit: 'You’ll take transit for this part',
+    legCar: 'You’ll drive this part',
     legAuto: 'The app will choose how to get there',
     undo: 'Undo',
     recap: 'Trip Recap',
     recapOpen: 'Look Back on Your Trip',
-    penguinBack: 'See Penguin’s Tips',
     favBack: 'Pick the Place You Look Forward to Most',
   },
 })
@@ -322,6 +355,7 @@ type Snapshot = {
   calm: boolean
   fill: boolean
   leeway: number
+  car: boolean
 }
 // 帯の文。名前（nm）は長ければ省略し、文の途中で折り返さないように区切って並べる
 type Part = { t: string; nm?: boolean; w?: boolean }
@@ -329,7 +363,16 @@ type Part = { t: string; nm?: boolean; w?: boolean }
 // 帯の内訳の 1 行。n: その行で変わった場所の数（場所の変更でない知らせには無い）
 type Line = { parts: Part[]; n?: number }
 // from: 手を入れる前の並び（組み直したあとに、外れた店と入った店が同じ枠かを見る）
-type Toast = { id: number; parts: Part[]; subs: Line[]; undo?: Snapshot; follow?: boolean; same?: string; from?: BaseItem[]; moving?: number }
+// keep: あとから来た知らせで置き換えず、1 行足す帯（入りきらない場所を回した知らせ）
+type Toast = { id: number; parts: Part[]; subs: Line[]; undo?: Snapshot; follow?: boolean; same?: string; from?: BaseItem[]; moving?: number; keep?: boolean }
+
+// 文の中の words（「2時間4分」「18:00」など）を、途中で折り返さない 1 かたまりにする
+function keepWhole(text: string, ...words: string[]): ReactNode {
+  const hit = words.filter(Boolean).sort((a, b) => b.length - a.length)
+  if (!hit.length) return text
+  const re = new RegExp(`(${hit.map((w) => w.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|')})`)
+  return text.split(re).map((x, i) => (i % 2 ? <span key={i} className="nw">{x}</span> : x))
+}
 
 // 帯の文を、名前（{n} の所）とそれ以外に分ける
 const say = (tmpl: string, name: string): Part[] => {
@@ -365,19 +408,15 @@ function legInfos(data: AreaData, plan: Plan): LegInfo[] {
 // 最初のプランを組む前に、時刻表の目安の表を待つ長さ（ミリ秒）
 const TABLE_WAIT = 2500
 // 候補がそろったあと、入れ替えるかを聞くプランの良さの差（組み立ての点数）
-// 長い希望は、上限の字数までの最後の句読点か空白で切る（切れ目が前の方にしか無ければ、上限で切る）
-function cutWish(text: string, max: number): string {
-  const chars = [...text]
-  if (chars.length <= max) return text
-  const head = chars.slice(0, max).join('')
-  const at = Math.max(...['、', '。', '，', '！', '？', ',', '.', '!', '?', ' ', '　'].map((c) => head.lastIndexOf(c)))
-  return (at >= head.length / 3 ? head.slice(0, at) : head).replace(/[\s,、。.]+$/, '') + T.cut
-}
 // 帰る時刻に入りきらないときに、外す候補として出す場所の数
 const FIT_ASK_MAX = 4
 // 外す場所を聞くのは、帰る時刻をこの分以上過ぎるときだけ（少しの遅れは滞在を短くすれば収まる）
 const FIT_ASK_LATE = 15
 const OFFER_GAIN = 5
+// 入力の画面の出発の時刻の最初の値（0 時からの分）
+const FIRST_START = 10 * 60
+// 泊まりの旅の日の最初のプランで、入りきらない場所を外す前に、移動の表の作り直しを待つ上限（ミリ秒）
+const CARRY_WAIT = 6000
 // 例のプラン（sample.json）に同梱できる、時刻表の目安の表（/api/bus-table の答えと、頼んだ日付・時間帯）
 type PackedTable = TransitTable & { date: string; start: number; end: number; sources: BusSource[] }
 // 文をクリップボードに写す。写せたら true（クリップボードの API が断られたら、選んで写す古い形で試す）
@@ -445,8 +484,11 @@ export default function App() {
     const s = readSaved()
     return s && !s.example ? s : null
   })
-  // もう片方の言語で作った端末のプラン（言語を切り替えたあとも、ホーム画面に出す）
-  const [other] = useState(readOtherSaved)
+  // もう片方の言語で作った端末のプラン（言語を切り替えたあとも、ホーム画面に出す。例のプランを見ただけのものは出さない）
+  const [other] = useState(() => {
+    const o = readOtherSaved()
+    return o && !untouchedDemo(o) ? o : null
+  })
   // 開いたら、いつもホーム画面を出す（旅が無い人も、ホーム画面から新しい旅を作るか例のプランを見る）。
   // 旅を開いて作り直したときと、言語を変えてそのプランを開くと頼んで読み直したときは、プランを出す。
   // URL に ?start=pick があるときは、例のエリアの選ぶ画面から始める。?example があるときは、例のプランをすぐ組む。
@@ -481,7 +523,7 @@ export default function App() {
     window.history.replaceState(window.history.state, '', url.toString())
   }, [])
   // 新しい旅の入力の画面を開く前の欄（「戻る」で入力の画面を離れたら戻す。端末の旅の欄を空で保存し直さないため）
-  const fieldsBefore = useRef<{ from: string; fromHit: GeoHit | null; to: string; toHit: GeoHit | null; back: boolean; preset: string | null; wish: string; date?: string; times?: { start: number; end: number; leeway: number } } | null>(null)
+  const fieldsBefore = useRef<{ from: string; fromHit: GeoHit | null; to: string; toHit: GeoHit | null; back: boolean; preset: string | null; wish: string; car: boolean; date?: string; times?: { start: number; end: number; leeway: number } } | null>(null)
   // 入力の画面から旅を作って離れたら、取っておいた欄は使わない
   useEffect(() => {
     if (view !== 'form') fieldsBefore.current = null
@@ -498,19 +540,77 @@ export default function App() {
   const [back, setBack] = useState(true)
   const [preset, setPreset] = useState<string | null>(null)
   const [wish, setWish] = useState('')
+  // 車で回る旅か（入力の画面で選んでいる分と、作った旅の分。旅の全日で 1 つ）
+  const [carTrip, setCarTrip] = useState(false)
+  // 車で回る旅（例のプランは車で回らない）
+  const car = carTrip && !data?.demo
+  // 入力の画面で、車で回るかを本人が切り替えたか（切り替えるまでは、希望の文と 1 行の文に書いてあるかで決める）
+  const carTouched = useRef(false)
   const [conds, setConds] = useState<Condition[]>([])
   const [must, setMust] = useState<string[]>([])
   // 選ぶ画面で見せた、希望に名前を書いた場所（あとから届いた分だけをプランに足すため）
   const namedSeen = useRef(new Set<string>())
   const [date, setDate] = useState(nextSaturday())
   const [tripSince, setTripSince] = useState(0)
+  // この旅のプランに本人が手を入れたか（例のプランを、見ただけなら端末の棚とクラウドに残さないため）
+  const [edited, setEdited] = useState(false)
+  // 何日かある旅の全日（開いている日の位置は null）と、開いている日。1 日の旅は null
+  const [days, setDays] = useState<(Saved | null)[] | null>(null)
+  const [dayAt, setDayAt] = useState(0)
+  // 予定している日数（作った日数より多ければ、まだ作っていない日も日の切り替えに出す）と、入力の画面で選んでいる日数
+  const [planDays, setPlanDays] = useState(1)
+  const [formDays, setFormDays] = useState(1)
+  // 泊まる宿と、旅の最後に観光を終える場所（null なら 1日目の出発地。undefined はまだ決めていない）。
+  // 入力の画面の宿の欄と、プランを変更のシートの宿の欄。作った直後に入れる宿（入力の画面で入れた分）
+  const [stays, setStays] = useState<Stays>([])
+  const [tripEnd, setTripEnd] = useState<TripPoint | null | undefined>(undefined)
+  // 宿の欄は泊ごと（k 番目が、入力の画面では k+1 泊目、シートではこれから作る日に効く k+1 番目の泊）。毎晩同じ宿に泊まるか
+  const stayForm1 = usePlaceField()
+  const stayForm2 = usePlaceField()
+  const stayForm3 = usePlaceField()
+  const staySheet1 = usePlaceField()
+  const staySheet2 = usePlaceField()
+  const staySheet3 = usePlaceField()
+  const stayForms = [stayForm1, stayForm2, stayForm3]
+  const staySheets = [staySheet1, staySheet2, staySheet3]
+  const [sameStay, setSameStay] = useState(true)
+  const [sheetSame, setSheetSame] = useState(true)
+  const formStay = useRef<{ stays: Stays; end: TripPoint | null } | null>(null)
+  // 旅を作る画面の形（日帰り・泊まりを 1 行の文から・泊まりを欄で）と、1 行の文から読み取った旅のまとめ。
+  // talkLast: 直前に送った文、talkPassed: もう聞いた任意の問い、formNote: 欄に切り替えたわけ（Gemini を使えなかったとき）
+  const [formKind, setFormKind] = useState<'day' | 'talk' | 'form'>('day')
+  const [talk, setTalk] = useState<Talk>({})
+  const [talkLast, setTalkLast] = useState('')
+  const [talkPassed, setTalkPassed] = useState<Question[]>([])
+  const [talkBusy, setTalkBusy] = useState(false)
+  const [talkError, setTalkError] = useState('')
+  const talkBusyRef = useRef(false)
+  // 1 行の文を送るたびの番号。切り替え・新しい旅・欄の形へ移ると進め、送った時と違う番号の返事は捨てる
+  const talkSeq = useRef(0)
+  const dropTalk = () => {
+    talkSeq.current++
+    talkBusyRef.current = false
+    setTalkBusy(false)
+  }
+  const [formNote, setFormNote] = useState('')
+  // 旅全体の希望と日ごとの希望と時刻（作った旅の分と、入力の画面から作った直後に入れる分）
+  const [wants, setWants] = useState<TripWants | undefined>(undefined)
+  const formWants = useRef<TripWants | undefined>(undefined)
+  // 泊まりの旅で、入りきらずにプランから外した見どころ（旅の全日で 1 つ）と、
+  // 選ぶ画面から作った日の最初のプランで、入りきらない見どころを外すか（next: 次の日。最終日は null）
+  const [carry, setCarry] = useState<Spot[]>([])
+  const carryAsk = useRef<{ next: number | null; at: number } | null>(null)
+  const [carryTick, setCarryTick] = useState(0)
+  // 次の日を加えている間（候補を選ぶ画面を開いてから、プランを作るまで）。n: 加える日（1 始まり）
+  const [adding, setAdding] = useState<{ n: number; date: string } | null>(null)
+  const [addError, setAddError] = useState('')
   // 選ぶ画面から作った直後に、一番楽しみな場所を聞く旅（その旅の since。0 は聞かない）と、聞き終えた旅
   const [favSince, setFavSince] = useState(0)
   const favDone = useRef(new Set<number>())
   // 閉じた「一番楽しみな場所は？」を、本人が開き直したか（開き直したときは、理由が入っていても聞く）
   const [favAgain, setFavAgain] = useState(false)
   const [nudgeSince, setNudgeSince] = useState(0) // 旅を作った直後の旅の since（開き直したときは 0 に戻る）
-  const [start, setStart] = useState(10 * 60)
+  const [start, setStart] = useState(FIRST_START)
   const [end, setEnd] = useState(18 * 60)
   const [pinned, setPinned] = useState<Pin[]>([])
   const [banned, setBanned] = useState<string[]>([])
@@ -519,6 +619,7 @@ export default function App() {
   const [modes, setModes] = useState<Record<string, LegMode>>({})
   // 歩く区間の、移動の手段を選ぶ画面（区間の番号）
   const [walkIdx, setWalkIdx] = useState<number | null>(null)
+  const [crowdOpen, setCrowdOpen] = useState(false)
   const [stayFix, setStayFix] = useState<Record<string, number>>({})
   const [picker, setPicker] = useState(false)
   // ホーム画面の「振り返る」から旅を開いたときは、振り返りカードを開いて始める
@@ -530,7 +631,7 @@ export default function App() {
   const [pace, setPace] = useState<Pace>('normal')
   const [moveLess, setMoveLess] = useState(false)
   const [calm, setCalm] = useState(false)
-  // 空いた時間に、選んでいない場所も足すか（場所を選んで作ったときは足さない。「空いた時間に場所を足す」で足す）
+  // 空いた時間に、選んでいない場所も足すか（場所を選んで作ったときは足さない。「空いた時間に場所を追加」で足す）
   const [fill, setFill] = useState(true)
   // 帰る時刻（到着の時刻）より早く終わってもよい時間（分）
   const [leeway, setLeeway] = useState(0)
@@ -551,6 +652,7 @@ export default function App() {
   const [loose, setLoose] = useState<string[]>([])
   const [toast, setToast] = useState<Toast | null>(null)
   const [toastOpen, setToastOpen] = useState(false)
+  const [statsOpen, setStatsOpen] = useState(false)
   const [transitIdx, setTransitIdx] = useState<number | null>(null)
   // 時刻表から作った、場所どうしのバス・電車で戸口から戸口までの目安（プランの日ごと。エリアの場所と並びが合うものだけ使う）
   const [busTable, setBusTable] = useState<{ date: string; table: TransitTable; sources: BusSource[] } | null>(null)
@@ -566,7 +668,7 @@ export default function App() {
   const [busSheet, setBusSheet] = useState<{ idx: number; after: number; trips: BusTrip[] | null } | null>(null)
   const [openId, setOpenId] = useState<string | null>(null)
   const [candId, setCandId] = useState<string | null>(null)
-  // 「場所を足す・外す」で開いている候補（地図にその候補を大きく出す）
+  // 「場所を追加・削除」で開いている候補（地図にその候補を大きく出す）
   const [pickerShow, setPickerShow] = useState<string | null>(null)
   // この付近で検索（地図の「この付近を検索」から開く）。box: 探す範囲、q: 最後に探した言葉、picked: 開いている結果の place_id。
   // 結果は Google の Places の内容なので、保存しない（画面を閉じたら捨てる）
@@ -586,6 +688,17 @@ export default function App() {
   // スケジュールの並べ替えのあいだ（「並べ替え」を押したあと）
   const [editing, setEditing] = useState(false)
   const [adjust, setAdjust] = useState(false)
+  // シートを開いたら、宿の欄を旅の宿にする
+  useEffect(() => {
+    if (!adjust || !data) return
+    const made = allDays(savedNow(data)).length
+    staySheets.forEach((f, j) => {
+      const at = stays[made + j] ?? null
+      f.set(at?.text ?? '', at ? hitOf(at) : null)
+    })
+    setSheetSame(stays.slice(made + 1).every((t) => !t))
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [adjust])
   // 振り返りの画面から、この場所の「選んだ理由」の欄へ送る（場所の画面が開いたら消す）
   const [whyFor, setWhyFor] = useState<string | null>(null)
   const [busy, setBusy] = useState<Busy>(null)
@@ -643,7 +756,7 @@ export default function App() {
         setPreset(saved.form?.preset ?? null)
         setWish(saved.wish)
       } else {
-        fieldsBefore.current = { from: saved.areaText, fromHit: saved.form?.fromHit ?? null, to: saved.form?.to ?? '', toHit: saved.form?.toHit ?? null, back: saved.form?.back ?? true, preset: saved.form?.preset ?? null, wish: saved.wish }
+        fieldsBefore.current = { from: saved.areaText, fromHit: saved.form?.fromHit ?? null, to: saved.form?.to ?? '', toHit: saved.form?.toHit ?? null, back: saved.form?.back ?? true, preset: saved.form?.preset ?? null, wish: saved.wish, car: !!saved.car }
       }
       setConds(saved.conds)
       condsTouched.current = saved.condsTouched
@@ -668,6 +781,18 @@ export default function App() {
       setFill(saved.fill ?? true)
       setLeeway(saved.leeway ?? 0)
       setTripSince(saved.since ?? 0)
+      setEdited(!!saved.edited)
+      setPlanDays(plannedDays(saved))
+      setStays(saved.stays ?? [])
+      setTripEnd(saved.tripEnd)
+      setWants(saved.wants)
+      setCarry(saved.carry ?? [])
+      setCarTrip(!!saved.car && openAfterLang() !== 'form')
+      dropTalk()
+      if (saved.days && saved.days.length > 1) {
+        setDays(saved.days)
+        setDayAt(dayIndex(saved))
+      }
     }
     return () => {
       if (timer.current) window.clearTimeout(timer.current)
@@ -675,15 +800,19 @@ export default function App() {
   }, [saved])
 
   // 手を入れるたびに、このブラウザに取っておく
+  const savedNow = (d: AreaData): Saved => {
+    const form = { fromHit: from.hit, back, to: to.text, toHit: to.hit, preset }
+    return { data: d, areaText: from.text, form, wish, conds, condsTouched: condsTouched.current, date, start, end, must, pinned, banned, overrides, ...(Object.keys(modes).length && { modes }), stayFix, focus, focusAdds, skipDistricts, base, ...(shownOrder && { shown: shownOrder }), loose, pace, moveLess, calm, ...(!fill && { fill }), ...(leeway > 0 && { leeway }), since: tripSince, ...(edited && { edited }), ...(days && days.length > 1 && { days, day: dayAt }), ...(!d.demo && planDays > (days && days.length > 1 ? days.length : 1) && { planDays }), ...(!d.demo && hasStay(stays) && { stays }), ...(!d.demo && tripEnd !== undefined && { tripEnd }), ...(!d.demo && wants && { wants }), ...(!d.demo && carry.length > 0 && { carry }), ...(!d.demo && carTrip && { car: true }) }
+  }
+  const savedNowRef = useRef(savedNow)
+  savedNowRef.current = savedNow
   useEffect(() => {
     if (!data || view === 'form') return
     const t = window.setTimeout(() => {
-      const form = { fromHit: from.hit, back, to: to.text, toHit: to.hit, preset }
-      const s: Saved = { data, areaText: from.text, form, wish, conds, condsTouched: condsTouched.current, date, start, end, must, pinned, banned, overrides, ...(Object.keys(modes).length && { modes }), stayFix, focus, focusAdds, skipDistricts, base, ...(shownOrder && { shown: shownOrder }), loose, pace, moveLess, calm, ...(!fill && { fill }), ...(leeway > 0 && { leeway }), since: tripSince }
-      if (writeSaved(s)) queueCloudSave()
+      if (writeSaved(savedNowRef.current(data))) queueCloudSave()
     }, 400)
     return () => window.clearTimeout(t)
-  }, [data, view, from.text, from.hit, back, to.text, to.hit, preset, wish, conds, date, start, end, must, pinned, banned, overrides, modes, stayFix, focus, focusAdds, skipDistricts, base, shownOrder, loose, pace, moveLess, calm, fill, leeway, tripSince])
+  }, [data, view, from.text, from.hit, back, to.text, to.hit, preset, wish, conds, date, start, end, must, pinned, banned, overrides, modes, stayFix, focus, focusAdds, skipDistricts, base, shownOrder, loose, pace, moveLess, calm, fill, leeway, tripSince, edited, days, dayAt, planDays, stays, tripEnd, wants, carry, carTrip])
 
   useEffect(() => {
     if (!data) return
@@ -730,6 +859,8 @@ export default function App() {
   }, [areaName])
   // 移動の表に無い点（あとから足した候補など）があれば、今の点で表を作り直す（並びはそのままにして、移動時間だけ新しくする）
   const matrixFor = useRef('')
+  // 表を作り直せなかった点の並び（入りきらない場所を外すのを、表を待たずに進める）
+  const [matrixMiss, setMatrixMiss] = useState('')
   useEffect(() => {
     if (!data || !hasServer || progress) return
     const ids = tableIds(data)
@@ -740,7 +871,10 @@ export default function App() {
     if (matrixFor.current === k) return
     matrixFor.current = k
     void loadMatrix(pts).then((m) => {
-      if (!m) return
+      if (!m) {
+        setMatrixMiss(ids.join('|'))
+        return
+      }
       setData((cur) => (cur && tableIds(cur).join('|') === ids.join('|') ? { ...cur, matrix: { ids, ...m } } : cur))
       if (planRef.current) setBase((b) => b ?? baseOf())
     })
@@ -768,29 +902,35 @@ export default function App() {
     const first = askedFor.current !== name
     askedFor.current = name
     const p = packed.current
-    if (p && p.data === data && p.date === date && p.start === start && p.end === end) {
+    if (car || (p && p.data === data && p.date === date && p.start === start && p.end === end)) {
       setTableBusy(false)
+      if (car) setReady(name)
       return
     }
     const stop = new AbortController()
     setTableBusy(true)
+    const take = (got: BusTable, late = false) => {
+      const { sources, ...table } = got
+      // プランを出したあとに届いたときは、組み直すので知らせ、開いている場所の画面を残す
+      const k = `${name}|${date}`
+      if (readyRef.current === name) {
+        if (late) notice(T.railFixed)
+        else if (tableFor.current !== k) notice(sources.length || !table.rail ? T.tableFixed : T.railFixed)
+        keepOpen.current = openRef.current
+        // 見せているプランの場所と並びは変えず、時刻だけを表に合わせる
+        if (currentRef.current && planRef.current?.stops.length) hold(baseOf())
+      }
+      tableFor.current = k
+      setBusTable({ date, table, sources })
+    }
     const t = window.setTimeout(() => {
-      fetchBusTable(data, date, start, end, stop.signal).then((got) => {
+      // 時刻表の表を先に使い、電車の路線が後から取れたら、電車の目安の入った表に替える
+      fetchBusTable(data, date, start, end, stop.signal, (later) => {
+        if (alive) take(later, true)
+      }).then((got) => {
         if (!alive) return
         setTableBusy(false)
-        if (got) {
-          const { sources, ...table } = got
-          // プランを出したあとに届いたときは、組み直すので知らせ、開いている場所の画面を残す
-          const k = `${name}|${date}`
-          if (readyRef.current === name) {
-            if (tableFor.current !== k) notice(sources.length || !table.rail ? T.tableFixed : T.railFixed)
-            keepOpen.current = openRef.current
-            // 見せているプランの場所と並びは変えず、時刻だけを表に合わせる
-            if (currentRef.current && planRef.current?.stops.length) hold(baseOf())
-          }
-          tableFor.current = k
-          setBusTable({ date, table, sources })
-        }
+        if (got) take(got)
         setReady(name)
       })
     }, first ? 0 : 1200)
@@ -799,13 +939,13 @@ export default function App() {
       stop.abort()
       window.clearTimeout(t)
     }
-  }, [data, date, start, end])
+  }, [data, date, start, end, car])
   const table = useMemo(() => {
-    if (!data || !busTable || busTable.date !== date) return null
+    if (car || !data || !busTable || busTable.date !== date) return null
     const ids = busTable.table.ids
     const want = new Set(tableIds(data))
     return ids.every((id) => want.has(id)) && ids.includes('end') === want.has('end') ? busTable.table : null
-  }, [data, date, busTable])
+  }, [data, date, busTable, car])
 
   // 時刻表から選んだ便は、その日のプランにだけ使う（日を変えたら目安に戻す）
   const live = useMemo(() => {
@@ -824,6 +964,7 @@ export default function App() {
     () => ({
       conds, must, day, start, end, pinned, banned, overrides: live, stayFix, focus, skipDistricts, base,
       ...(Object.keys(modes).length && { modes }),
+      ...(car && { car }),
       ...(loose.length && { loose }),
       ...(pace !== 'normal' && { pace }),
       ...(moveLess && { moveLess }),
@@ -833,7 +974,7 @@ export default function App() {
       ...(!fill && { fill }),
       ...(leeway > 0 && { leeway }),
     }),
-    [conds, must, day, start, end, pinned, banned, live, modes, stayFix, focus, skipDistricts, base, loose, pace, moveLess, calm, table, sunset, fill, leeway],
+    [conds, must, day, start, end, pinned, banned, live, modes, car, stayFix, focus, skipDistricts, base, loose, pace, moveLess, calm, table, sunset, fill, leeway],
   )
   // base を固定しているときは、並びにない候補を計算のときだけ外す（食事の入れ替えや空いた時間への追加をさせない）
   const planInput: PlanInput = useMemo(() => {
@@ -907,7 +1048,7 @@ export default function App() {
   useMemo(() => data && syncBusLines(data, live), [data, live])
   // 便を出せるかを聞く（冷えたサーバーが時刻表を取り始めるので、プランを見ている間に温まる）
   useEffect(() => {
-    if (!data || !hasServer) return
+    if (!data || !hasServer || car) return
     let alive = true
     const box = areaBox(data)
     loadBusInfo(date, box).then((b) => {
@@ -918,7 +1059,7 @@ export default function App() {
     return () => {
       alive = false
     }
-  }, [data, date])
+  }, [data, date, car])
   const busLegs = useMemo(() => (data && plan ? legInfos(data, plan) : []), [data, plan])
   const planLegs = useMemo(() => (plan ? [...plan.stops.map((s) => s.leg), plan.back] : []), [plan])
   const slope = useSlopes(planLegs, hasServer)
@@ -1000,7 +1141,7 @@ export default function App() {
   const candidates = useMemo(() => {
     if (!data || !plan) return []
     const inPlan = new Set(plan.stops.map((s) => s.spot.id))
-    return data.places.filter((p) => p.id === peekId || (!inPlan.has(p.id) && !banned.includes(p.id) && !(p.district && skipDistricts.includes(p.district))))
+    return data.places.filter((p) => p.id === peekId || (!inPlan.has(p.id) && !banned.includes(p.id) && !p.unfound && !(p.district && skipDistricts.includes(p.district))))
   }, [data, plan, banned, skipDistricts, peekId])
   const cand = candId ? (data?.places.find((p) => p.id === candId) ?? null) : null
   const planRef = useRef(plan)
@@ -1022,33 +1163,93 @@ export default function App() {
   }, [plan])
   const baseOf = (): BaseItem[] => (planRef.current?.stops ?? []).map((s) => ({ id: s.spot.id, slot: s.slot }))
 
-  // 知らせだけの帯。「元に戻す」の帯が出ているときは、その帯に 1 行足す（戻せなくならないように）
+  // 知らせだけの帯。「元に戻す」の帯と、入りきらない場所を回した帯が出ているときは、その帯に 1 行足す（戻せなく・見落とさないように）
   const notice = (text: string) =>
-    setToast((cur) => (cur?.undo ? { ...cur, id: Date.now(), subs: [...cur.subs, { parts: [{ t: text }] }] } : { id: Date.now(), parts: [{ t: text }], subs: [] }))
+    setToast((cur) => (cur?.undo || cur?.keep ? { ...cur, id: Date.now(), subs: [...cur.subs, { parts: [{ t: text }] }] } : { id: Date.now(), parts: [{ t: text }], subs: [] }))
 
-  const create = async () => {
-    if (!from.text.trim() || busy) return
+  // 選ぶ画面から作った日の最初のプランが組み上がったら、希望に名前を書いたのに遠くて候補に入れなかった場所を知らせる（1 回だけ）
+  const farAsk = useRef(false)
+  useEffect(() => {
+    if (!farAsk.current || !data || !plan || !current) return
+    farAsk.current = false
+    if (data.far?.length) notice(T.farWish(names(data.far)))
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [data, plan, current])
+  // 泊まりの旅の日の最初のプランが組み上がったら、入りきらずに外れた見どころを、まだ入れていない場所に回す（1 回だけ）。
+  // そのあとは選んだ見どころを外さず、残った場所の並びもそのままにする。移動の表を作り直している間は待つ
+  useEffect(() => {
+    const ask = carryAsk.current
+    if (!ask || !data || !plan || !current || pending) return
+    if (hasServer && matrixMiss !== tableIds(data).join('|') && Date.now() - ask.at < CARRY_WAIT) {
+      const have = new Set(data.matrix?.ids ?? [])
+      if (must.some((id) => !have.has(id))) {
+        const t = window.setTimeout(() => setCarryTick((n) => n + 1), 500)
+        return () => window.clearTimeout(t)
+      }
+    }
+    carryAsk.current = null
+    const inPlan = new Set(plan.stops.map((s) => s.spot.id))
+    const out = must.filter((id) => !inPlan.has(id))
+    const spots = out.flatMap((id) => data.places.filter((p) => p.id === id))
+    setLoose([])
+    hold(baseOf())
+    if (!out.length) return
+    setMust((m) => m.filter((id) => !out.includes(id)))
+    if (!spots.length) return
+    setCarry((c) => addCarry(c, spots))
+    // 先に出ていた知らせ（希望に合う場所を足したこと）は消さず、下の行に残す
+    const said = { t: ask.next ? T.carried(spots.length, ask.next) : T.carriedLast(spots.length) }
+    setToast((cur) => ({ id: Date.now(), parts: [said], subs: cur && !cur.undo ? [{ parts: cur.parts }, ...cur.subs] : [], keep: true }))
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [data, plan, current, pending, must, matrixMiss, carryTick])
+  // 旅のどれかの日のプランに入った場所は、まだ入れていない場所から除く（開いている日は、取っておいた並びではなく今のプラン）
+  useEffect(() => {
+    if (!data || !plan || !current || !carry.length) return
+    const s = savedNowRef.current(data)
+    const next = dropCarried(carry, usedWith(usedPlaces(s, dayIndex(s)), plan.stops.map((x) => x.spot)))
+    if (next !== carry) setCarry(next)
+  }, [data, plan, current, carry])
+
+  // nextDay: 旅に次の日を加えるときの頼み（出発地・希望と、候補から除く場所）
+  const create = async (nextDay?: { trip: TripAsk; wish: string; keep: (d: AreaData) => AreaData }) => {
+    if ((!nextDay && !from.text.trim()) || busy) return
     setError('')
+    setAddError('')
     if (timer.current) window.clearTimeout(timer.current)
     const seq = ++jobSeq.current
     const since = Date.now()
-    // 出発地と到着地を引いていなければ引く（見つからなければ、欄の下に出して止める）
-    setBusy({ job: { id: '', state: 'running' }, since })
-    const [s, e] = await Promise.all([from.lookup(), back ? Promise.resolve(null) : to.lookup()])
-    if (seq !== jobSeq.current) return
-    if (!s || (!back && !e) || (e && distM(s, e) > MAX_TRIP_KM * 1000)) {
-      setBusy(null)
-      return
+    let trip: TripAsk
+    if (nextDay) trip = nextDay.trip
+    else {
+      // 出発地と到着地を引いていなければ引く（見つからなければ、欄の下に出して止める）
+      setBusy({ job: { id: '', state: 'running' }, since })
+      const fields = shownNights(Array.from({ length: Math.max(0, formDays - 1) }, (_, k) => k + 1), sameStay).map((n) => stayForms[n - 1])
+      // 泊まりの旅の宿と観光を終える場所は、行き先のエリアの名前を前に付けて引く（行き先を先に引く）
+      const near = formDays > 1 ? nearOf(await from.lookup(), from.text) : undefined
+      const [s, e, st] = await Promise.all([from.lookup(), back ? Promise.resolve(null) : to.lookup(near), lookStays(fields, near)])
+      if (seq !== jobSeq.current) return
+      if (!s || (!back && !e) || (e && distM(s, e) > MAX_TRIP_KM * 1000) || !st || stayFarTexts(s, st, back ? s : e, false).some(Boolean)) {
+        setBusy(null)
+        return
+      }
+      const origin = tripPoint(from, s)
+      const goal = e ? tripPoint(to, e) : null
+      formStay.current = hasStay(st) ? { stays: trimStays(st), end: goal } : null
+      const first = formStay.current && stayTrip(1, formDays, origin, formStay.current.stays, goal)
+      trip = { start: origin, end: first ? first.end : goal, ...(preset && { area: preset }) }
+      formWants.current = formKind !== 'day' && formDays > 1 ? wantsOf(wish, fitDays(talk.days, talk.nights, formDays - 1), formDays) : undefined
     }
-    const trip: TripAsk = { start: tripPoint(from, s), end: e ? tripPoint(to, e) : null, ...(preset && { area: preset }) }
+    const firstWish = formKind !== 'day' && formDays > 1 ? joinWish(wish, talk.days?.[0]?.wish) : wish.trim()
     let applied = false
     let misses = 0
     const fail = (kind: 'quota' | 'network' | 'failed') => {
       setBusy(null)
       setProgress(null)
-      setError(
-        kind === 'quota' ? T.quotaPlan : kind === 'network' ? T.offline : T.noPlaces,
-      )
+      const text = kind === 'quota' ? T.quotaPlan : kind === 'network' ? T.offline : T.noPlaces
+      if (nextDay && !applied) {
+        setAdding(null)
+        setAddError(text)
+      } else setError(text)
     }
     let version = -1
     let tag: string | undefined
@@ -1067,7 +1268,7 @@ export default function App() {
         const more = (j.steps ?? []).some((s) => s.key !== 'verify' && (s.state === 'wait' || s.state === 'run'))
         if ((j.version ?? 0) > version) {
           version = j.version ?? 0
-          const result = j.result
+          const result = nextDay ? nextDay.keep(j.result) : j.result
           if (!applied) {
             // 候補が届き始めたら、行きたい場所を選ぶ画面へ（届いた分から選べ、続きは届くたびに一覧に足す）
             applied = true
@@ -1125,7 +1326,7 @@ export default function App() {
     }
     setBusy({ job: { id: '', state: 'running' }, since })
     try {
-      handle(await startJob(trip, wish.trim()))
+      handle(await startJob(trip, nextDay ? nextDay.wish : firstWish, carTrip))
     } catch (e) {
       if (seq === jobSeq.current) fail(e instanceof TypeError ? 'network' : 'failed')
     }
@@ -1140,6 +1341,7 @@ export default function App() {
       setBack(b.back)
       setPreset(b.preset)
       setWish(b.wish)
+      setCarTrip(b.car)
       if (b.date) setDate(b.date)
       if (b.times) {
         setStart(b.times.start)
@@ -1147,6 +1349,7 @@ export default function App() {
         setLeeway(b.times.leeway)
       }
     }
+    dropTalk()
     markBack()
     setView(to2)
   }
@@ -1164,7 +1367,7 @@ export default function App() {
   // 探す頼みは返事に時間がかかるので、返ってきたときの状態を読む
   const adjRef = useRef<AdjustState>({ must, pinned, banned, focus, stayFix, conds, skipDistricts, start, end, base, loose })
   adjRef.current = { must, pinned, banned, focus, stayFix, conds, skipDistricts, start, end, base, loose }
-  const snap = (): Snapshot => ({ must, pinned, banned, overrides, modes, stayFix, focus, focusAdds, skipDistricts, base, loose, openId, start, end, conds, pace, moveLess, calm, fill, leeway })
+  const snap = (): Snapshot => ({ must, pinned, banned, overrides, modes, stayFix, focus, focusAdds, skipDistricts, base, loose, openId, start, end, conds, pace, moveLess, calm, fill, leeway, car: carTrip })
   const restore = (x: Snapshot) => {
     setMust(x.must)
     setPinned(x.pinned)
@@ -1186,12 +1389,14 @@ export default function App() {
     setCalm(x.calm)
     setFill(x.fill)
     setLeeway(x.leeway)
+    setCarTrip(x.car)
   }
   // 手を入れる。帯が出ている間に続けた操作は、「元に戻す」で全部まとめて戻す。
   // 手を入れたあとのプランは、前のプランの並びを土台にする（base）
   // moving: 手を入れる前の移動の時間（渡したときは、組み直して移動が大きく増えたら帯で知らせる）
   const edit = (parts: Part[], fn: () => void, subs: Line[] = [], same?: string, moving?: number) => {
     const s = snap()
+    setEdited(true)
     setToast((cur) => ({ id: Date.now(), parts, subs, undo: cur?.undo ?? s, follow: true, same, from: baseOf(), moving }))
     setToastOpen(false)
     setOffer(null)
@@ -1214,6 +1419,20 @@ export default function App() {
     topRo.current.observe(el)
   }, [])
   const showToast = !!toast && !(toast.follow && toast.same !== undefined)
+  // 希望に合う場所を足したことは、プランを作ったときに知らせの帯で 1 回だけ伝える
+  const wishTold = useRef<AreaData | null>(null)
+  useEffect(() => {
+    if (!data || !plan || wishTold.current === data) return
+    // 例のプランでは知らせない（開いた人は希望を書いていないので、「希望に合う場所を追加しました」と出ると何の事か分からない）
+    if (data.demo || data.example) return
+    const labels = new Set(data.conditions.map((c) => c.label))
+    const n = plan.stops.filter((s) => s.fits.some((f) => labels.has(f))).length
+    if (!(data.query?.wish ?? wish).trim() || n === 0) return
+    wishTold.current = data
+    notice(T.wishFitN(n))
+    // 新しいプランのときだけ知らせる
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [data, plan])
   useEffect(() => {
     const el = stackRef.current
     const root = document.documentElement.style
@@ -1234,7 +1453,7 @@ export default function App() {
       return
     }
     if (toastOpen) return
-    const t = window.setTimeout(() => setToast(null), toast.undo ? 7000 : 3500)
+    const t = window.setTimeout(() => setToast(null), toast.undo || toast.keep ? 7000 : 3500)
     return () => window.clearTimeout(t)
   }, [toast, toastOpen])
   // 組み直しが終わったら、時間に合わせて外した場所・足した場所を帯に書き足す
@@ -1291,6 +1510,14 @@ export default function App() {
       setOpenId(open ? to : null)
     })
   }
+  // 泊まりの旅で、入りきらない場所をプランから外し、まだ入れていない場所に回す（next: 次の日。最終日は null）
+  const carryStop = (s: Stop, next: number | null) =>
+    edit(say(next ? T.carriedOne(next) : T.removed, s.spot.name), () => {
+      removeFromPlan(s.spot.id)
+      setMust((m) => m.filter((x) => x !== s.spot.id))
+      setCarry((c) => addCarry(c, [s.spot]))
+      setOpenId(null)
+    })
   const removeStop = (s: Stop) =>
     edit(say(T.removed, s.spot.name), () => {
       removeFromPlan(s.spot.id)
@@ -1328,6 +1555,11 @@ export default function App() {
   const changeMoveLess = (on: boolean) =>
     edit([{ t: on ? T.moveLessOn : T.moveLessOff }], () => {
       setMoveLess(on)
+      setBase(null)
+    })
+  const changeCar = (on: boolean) =>
+    edit([{ t: on ? T.carOn : T.carOff }], () => {
+      setCarTrip(on)
       setBase(null)
     })
   const changeCalm = (on: boolean) =>
@@ -1472,6 +1704,7 @@ export default function App() {
     })
   // 日時・条件を変えたときは、はじめから組み直す
   const fresh = <T,>(set: (v: T) => void) => (v: T) => {
+    setEdited(true)
     setBase(null)
     setOffer(null)
     setOfferAsk(0)
@@ -1534,7 +1767,7 @@ export default function App() {
     onStatus(T.finding)
     let j: JobState
     try {
-      j = await startJob(tripOf(data), wishText)
+      j = await startJob(tripOf(data), wishText, car)
     } catch {
       return OFFLINE
     }
@@ -1605,6 +1838,7 @@ export default function App() {
       conds: conds.map((c) => c.tag),
       skip: skipDistricts,
       prefer: { moveLess, calm },
+      ...(car && { car: true }),
       plan: plan.stops.map((st) => ({ id: st.spot.id, name: st.spot.name, slot: st.slot, district: st.spot.district, arrive: st.arrive, depart: st.depart, stay: st.stay, lat: st.spot.lat, lng: st.spot.lng })),
       places: data.places.map((p) => ({ id: p.id, name: p.name, kind: p.kind, role: p.role, district: p.district, tags: p.tags, open: p.open, close: p.close, why: p.why, lat: p.lat, lng: p.lng })),
     }
@@ -1637,7 +1871,8 @@ export default function App() {
     const legs = [...plan.stops.map((s) => s.leg), plan.back]
     const tour = legs.every((l) => l.mode === 'walk')
     const legLines = (leg: Leg) => [`${T.down}${shareLabel(leg)}`, ...(tour || leg.mode === 'walk' ? [] : [mapsDirUrl(leg)])]
-    const lines = [`${data.area.name} ${dateLabel(date)}`, `${fmt(plan.leave)} ${T.shareDepart(data.start.name)}`]
+    const name = stayTitle(savedNow(data)) ?? data.area.name
+    const lines = [`${name} ${dateLabel(date)}`, `${fmt(plan.leave)} ${T.shareDepart(data.start.name)}`]
     plan.stops.forEach((s) => {
       const [move, ...url] = legLines(s.leg)
       lines.push(`${move}${s.ease > 0 ? T.shareEase(s.ease) : ''}`, ...url, `${fmt(s.arrive)} ${T.shareStop(s.spot.name, fmtDur(s.stay))}`)
@@ -1650,7 +1885,7 @@ export default function App() {
     // スマホは端末の共有の画面、PC（細かく指せる端末）と共有の画面が無い・開けないときはクリップボードに写す
     if (navigator.share && !window.matchMedia('(pointer: fine)').matches) {
       try {
-        await navigator.share({ title: T.shareTitle(data.area.name), text })
+        await navigator.share({ title: T.shareTitle(name), text })
         return
       } catch (e) {
         if (e instanceof DOMException && e.name === 'AbortError') return
@@ -1683,6 +1918,7 @@ export default function App() {
     setTransitIdx(null)
     setWalkIdx(null)
     setAdjust(false)
+    setCrowdOpen(false)
   }
   // 地図の「この付近を検索」: シートを開く。もう探した言葉があれば、今見えている範囲で探し直す
   const openAreaSearch = () => {
@@ -1692,7 +1928,7 @@ export default function App() {
   }
   // 入力の画面を空で開く（自分のプランを作る）。src: 「戻る」で戻す先
   const startNew = (src: 'home' | 'pick' | 'plan' = view === 'pick' ? 'pick' : 'plan') => {
-    fieldsBefore.current ??= { from: from.text, fromHit: from.hit, to: to.text, toHit: to.hit, back, preset, wish }
+    fieldsBefore.current ??= { from: from.text, fromHit: from.hit, to: to.text, toHit: to.hit, back, preset, wish, car: carTrip }
     // 開いていた旅の日付が今日より前なら、新しい旅は次の土曜から（「戻る」で離れたら戻す）
     if (date < isoDate(new Date())) {
       fieldsBefore.current.date ??= date
@@ -1701,21 +1937,162 @@ export default function App() {
     // 開いていたのが例のプランなら、例の時刻（7:30〜15:00）を引き継がず、ふつうの時刻（10:00〜18:00）から（「戻る」で離れたら戻す）
     if (data?.example) {
       fieldsBefore.current.times ??= { start, end, leeway }
-      setStart(10 * 60)
+      setStart(FIRST_START)
       setEnd(18 * 60)
       setLeeway(0)
     }
     setFormFrom(src)
     setAdjust(false)
+    setFormDays(1)
+    stayForms.forEach((f) => f.set('', null))
+    setSameStay(true)
+    setFormKind('day')
+    dropTalk()
+    setTalk({})
+    setTalkLast('')
+    setTalkPassed([])
+    setTalkError('')
+    setFormNote('')
     from.set('', null)
     to.set('', null)
     setBack(true)
     setPreset(null)
     setWish('')
+    setCarTrip(false)
+    carTouched.current = false
     setError('')
     setView('form')
   }
   startNewRef.current = startNew
+  // 泊まりの旅で行き先を引き直したら、宿と観光を終える場所も、新しい行き先のエリアの名前で引き直す
+  useEffect(() => {
+    if (formKind === 'day' || view !== 'form' || !from.hit) return
+    const near = nearOf(from.hit, from.text)
+    ;[...stayForms, ...(back ? [] : [to])].forEach((f) => {
+      if (f.text.trim()) void f.lookup(near)
+    })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [from.hit, formKind, view])
+  // 1 行の文から読み取った差分を、入力の画面の欄に入れる（next: 差分を入れたあとのまとめ）
+  const putTalk = (d: Partial<Talk>, next: Talk) => {
+    if (d.from && next.from) {
+      from.setText(next.from)
+      setPreset(null)
+    }
+    // 宿と観光を終える場所は、行き先を引いてから、そのエリアの名前を前に付けて引く
+    const looks: PlaceField[] = []
+    const nights = next.nights ?? 0
+    if (d.nights && nights) setFormDays(nights + 1)
+    if ((d.stays || d.nights) && next.stays) {
+      const { same, texts } = stayFieldsOf(next.stays.slice(0, nights || next.stays.length))
+      setSameStay(same)
+      stayForms.forEach((f, k) => {
+        const t = texts[k] ?? ''
+        if (t.trim() !== f.text.trim()) f.setText(t)
+        if (t.trim()) looks.push(f)
+      })
+    }
+    if (d.date) setDate(d.date)
+    if (d.end === null) setBack(true)
+    else if (d.end && next.end) {
+      setBack(false)
+      to.setText(next.end)
+      looks.push(to)
+    }
+    const fromText = next.from ?? from.text
+    void from.lookup().then((h) => {
+      const near = nearOf(h, fromText)
+      looks.forEach((f) => void f.lookup(near))
+    })
+    if (d.wish && next.wish) setWish(next.wish)
+    const first = d.days?.[0] && next.days?.[0]
+    if (first && (first.start !== undefined || first.end !== undefined)) {
+      const st = first.start ?? start
+      setStart(st)
+      setEnd(fitEnd(st, first.end ?? end))
+    }
+  }
+  // 欄で入力する形に切り替える（note: 切り替えたわけ、text: 送れなかった文。消さずに希望の欄に入れる）
+  const toStayForm = (note: string, text = '') => {
+    dropTalk()
+    setFormKind('form')
+    setFormNote(note)
+    setTalkError('')
+    if (formDays < 2) setFormDays(2)
+    if (text.trim()) setWish((w) => joinWish(w, text))
+  }
+  // 1 行の文を送る。読み取れたら true（箱を空にする）。何も読み取れなかったときは、任意の問いならスキップと同じにし、
+  // 行き先・泊数の問いと全部そろったあとなら、問いかけを変えずに一言を出す（箱の文は残す）。サーバーに届かない・上限・口のエラーは欄へ
+  const talkSend = async (text: string): Promise<boolean> => {
+    if (talkBusyRef.current || busy) return false
+    talkBusyRef.current = true
+    const seq = ++talkSeq.current
+    const asked = nextQuestion(talk, talkPassed, !!talkLast)
+    setTalkBusy(true)
+    setTalkError('')
+    let r: { diff?: Partial<Talk>; error?: string } | null = null
+    try {
+      r = await askTrip(text, talk, isoDate(new Date()))
+    } catch {
+      r = null
+    }
+    if (seq !== talkSeq.current) return false
+    talkBusyRef.current = false
+    setTalkBusy(false)
+    if (!r) {
+      toStayForm(T.talkOffline, text)
+      return false
+    }
+    if (r.error || !r.diff) {
+      toStayForm(r.error === 'quota' ? T.talkQuota : T.talkFailed, text)
+      return false
+    }
+    if (!Object.keys(r.diff).length) {
+      if (talk.over) setTalk({ ...talk, over: false })
+      if (!canSkip(asked)) {
+        setTalkError(T.talkEmpty)
+        return false
+      }
+      setTalkLast(text)
+      setTalkPassed((x) => (x.includes(asked) ? x : [...x, asked]))
+      return true
+    }
+    const next = mergeTalk(talk, r.diff)
+    const said = mentionsCar(text)
+    if (said !== null && !carTouched.current) setCarTrip(said)
+    setTalk(next)
+    putTalk(r.diff, next)
+    setTalkLast(text)
+    if (canSkip(asked)) setTalkPassed((x) => (x.includes(asked) ? x : [...x, asked]))
+    return true
+  }
+  // 日帰りか泊まりかを切り替える。泊まりは 1 行の文から作る形で始め、それまでのまとめを欄に入れ直す
+  const switchKind = (stay: boolean) => {
+    if (busy && formKind === 'talk') return
+    dropTalk()
+    setFormNote('')
+    setError('')
+    if (!stay) {
+      setFormKind('day')
+      setFormDays(1)
+      stayForms.forEach((f) => f.set('', null))
+      setSameStay(true)
+      return
+    }
+    setTalkError('')
+    setFormKind('talk')
+    // 日付と出発の時刻は、最初の値から変えてあるときだけ、入力した物としてまとめに入れる
+    const next: Talk = {
+      ...talk,
+      ...(from.text.trim() && { from: from.text.trim() }),
+      ...(wish.trim() && { wish: wish.trim() }),
+      ...(date !== nextSaturday() && { date }),
+      ...(start !== FIRST_START && { days: [{ ...talk.days?.[0], start }, ...(talk.days ?? []).slice(1)] }),
+    }
+    setTalk(next)
+    const { from: _from, wish: _wish, ...rest } = next
+    putTalk(rest, next)
+  }
   // 調整の画面を閉じたら、送っている途中の頼みは取りやめる
   const closeAdjust = useCallback(() => {
     askSeq.current++
@@ -1729,6 +2106,83 @@ export default function App() {
     pickJob.current = null
     setProgress(null)
     setPartial(false)
+  }
+  // 旅に次の日を加える（前の日の終わりの場所から、次の日の候補を集めて選ぶ画面へ。前の日までに入れた場所は候補から除く）
+  // （宿を入れた旅は、1日目は宿まで・中の日は宿から宿へ・最終日は宿から最後に観光を終える場所まで）
+  const startAddDay = (over: (s: Saved) => Saved = (s) => s) => {
+    if (!data || busy || adding) return
+    const cur = over(savedNow(data))
+    const list = allDays(cur)
+    const last = list[list.length - 1]
+    const used = usedPlaces(cur)
+    setAdding({ n: list.length + 1, date: nextDate(last.date) })
+    setPick(null)
+    const want = dayWants(cur, list.length + 1)
+    const left = cur.carry ?? []
+    const met = metWishes(cur)
+    void create({ trip: addDayAsk(cur), wish: want ? want.wish : (last.data.query?.wish ?? last.wish).trim(), keep: (d) => withCarry(quietMet(dropUsed(d, used), met), left).data })
+  }
+  // プランを変更のシートの宿を引くときに前に付ける、1日目の出発地のエリアの名前
+  const sheetNear = (s: Saved) => nearOf(null, allDays(s)[0].data.query?.start?.text ?? '')
+  // 宿の欄の宿を引く（空の欄は null）。引けない欄があれば null。near: 前に付けるエリアの名前
+  const lookStays = async (fields: PlaceField[], near?: string): Promise<Stays | null> => {
+    const hits = await Promise.all(fields.map((f) => (f.text.trim() ? f.lookup(near) : Promise.resolve(null))))
+    if (fields.some((f, j) => f.text.trim() && !hits[j])) return null
+    return hits.map((h, j) => (h ? tripPoint(fields[j], h) : null))
+  }
+  // プランを変更のシートで入れた宿を、旅に入れる。旅の取っておく形に宿を入れる関数を返し、引けなかったときは null。
+  // 欄は、これから作る日に効く泊（作った日数 made より後の泊）だけ。空の欄と、毎晩同じ宿のときの 2 つめからの泊は、前の泊と同じ
+  const commitStay = async (): Promise<((s: Saved) => Saved) | null> => {
+    const keep = (s: Saved) => s
+    if (!data) return keep
+    const cur = savedNow(data)
+    const made = allDays(cur).length
+    const count = Math.max(0, plannedDays(cur) - 1 - made)
+    if (!count) return keep
+    const vals = await lookStays(staySheets.slice(0, sheetSame ? 1 : count), sheetNear(cur))
+    if (!vals) return null
+    const head: Stays = Array.from({ length: made }, (_, k) => stays[k] ?? null)
+    const next: Stays = [...head, ...vals]
+    if (JSON.stringify(trimStays(next)) === JSON.stringify(trimStays(stays))) return keep
+    const put = (s: Saved) => withStays(s, next)
+    const s = put(savedNow(data))
+    setStays(s.stays ?? [])
+    setTripEnd(s.tripEnd)
+    return put
+  }
+  // プランを変更のシートで、注意の出ている宿の欄を見える所まで送る
+  const showStayNote = () =>
+    window.setTimeout(() => {
+      const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches
+      document.querySelector('.sheet .stay-field .note.warn')?.closest('.stay-field')?.scrollIntoView({ block: 'nearest', behavior: reduce ? 'auto' : 'smooth' })
+    }, 50)
+  // 次の日を加えるのをやめて、元の日のプランに戻る
+  const cancelAdd = () => {
+    stopPicking()
+    jobSeq.current++
+    if (timer.current) window.clearTimeout(timer.current)
+    setBusy(null)
+    setAdding(null)
+    setPick(null)
+  }
+  // 開く日を替える（入れ替えた形を取っておき、旅を開き直す。窓の位置はそのまま）
+  const openDay = (i: number) => {
+    if (!data || i === dayAt) return
+    const next = switchDay(savedNow(data), i)
+    if (!writeSaved(next)) return
+    keepScroll()
+    reopenCurrent()
+  }
+  // 開いている日を消して、前の日を開く
+  const deleteDay = () => {
+    if (!data || !days || days.length < 2) return
+    if (!window.confirm(DAY_TEXT.confirm(dayAt + 1))) return
+    const next = removeDay(savedNow(data))
+    if (!writeSaved(next)) return
+    queueCloudSave()
+    setAdjust(false)
+    keepScroll()
+    reopenCurrent()
   }
   // プランの画面で開いているシートを閉じる
   const closePlanSheets = () => {
@@ -1759,6 +2213,11 @@ export default function App() {
       leaveForm(formFrom)
       return formFrom
     }
+    if (view === 'pick' && adding) {
+      cancelAdd()
+      setView('plan')
+      return 'plan'
+    }
     if (view === 'pick') {
       stopPicking()
       const dest = to === 'form' && shown.current.has('form') ? 'form' : to === 'plan' && data ? 'plan' : 'home'
@@ -1774,11 +2233,26 @@ export default function App() {
     }
     return view
   })
+  // 次の日の候補を検索している間は、スマホの「戻る」で検索をやめて元の日のプランに戻る
+  const addWait = view === 'plan' && !!adding && !!busy
+  useBackClose(addWait, cancelAdd)
 
   if (view === 'home') {
+    // 何日かある旅は、全日の場所の名前と日付（開いている日はプランの並び、ほかの日は取っておいた並び）
+    const here = plan?.stops.map((s) => s.spot.name)
+    const all = data && days && days.length > 1 ? allDays(savedNow(data)) : null
+    const names = all
+      ? all.flatMap((d, i) => {
+          if (i === dayAt) return here ?? []
+          const byId = new Map(d.data.places.map((p) => [p.id, p.name]))
+          return dayStopIds(d).flatMap((id) => (byId.has(id) ? [byId.get(id) as string] : []))
+        })
+      : here
+    // 例のプランを見ただけのときは、自分の旅として出さない
+    const mine = !!data && !untouchedDemo(savedNow(data))
     return (
       <Home
-        device={data ? { title: tripTitle(data, from.text), date, places: plan?.stops.map((s) => s.spot.name), first: plan?.stops[0]?.spot ?? null } : null}
+        device={data && mine ? { title: stayTitle(savedNow(data)) ?? tripTitle(all ? all[0].data : data, all ? all[0].areaText : from.text), date: all ? all[0].date : date, ...(all && { dates: all.map((d) => d.date) }), places: names, first: all && dayAt > 0 ? (all[0].data.places.find((p) => p.id === dayStopIds(all[0])[0]) ?? null) : (plan?.stops[0]?.spot ?? null) } : null}
         onOpenDevice={() => setView(data ? 'plan' : 'pick')}
         onRecapDevice={() => {
           setView(data ? 'plan' : 'pick')
@@ -1786,6 +2260,13 @@ export default function App() {
         }}
         onRemoveDevice={() => {
           clearSaved()
+          setDays(null)
+          setDayAt(0)
+          setPlanDays(1)
+          setStays([])
+          setTripEnd(undefined)
+          setWants(undefined)
+          setCarry([])
           setData(null)
           setPick(null)
         }}
@@ -1795,19 +2276,33 @@ export default function App() {
           setAdjust(false)
           setView('pick')
         }}
-        other={other ? { title: tripTitle(other.data, other.areaText), date: other.date } : null}
+        other={other ? { title: stayTitle(other) ?? tripTitle(other.data, other.areaText), date: other.date } : null}
       />
     )
   }
 
   if (view === 'pick') {
     const picking = pickJob.current !== null
+    // 泊まりの旅の何日目か・その日の時刻（加える日は、まとめにその日の時刻があればそれ）・前の日までに入りきらなかった場所
+    const cur = adding && data ? savedNow(data) : null
+    const total = cur ? plannedDays(cur) : formDays
+    const dayNo = adding ? adding.n : pick && formDays > 1 ? 1 : undefined
+    const want = cur && adding ? dayWants(cur, adding.n) : null
+    const dayStart = want?.start ?? start
+    const dayEnd = want && (want.start !== undefined || want.end !== undefined) ? fitEnd(dayStart, want.end ?? end) : end
+    const carried = adding && pick ? withCarry(pick.data, carry).ids : undefined
     return (
       <StartPick
         key={pick?.key ?? 0}
         map={MapPart}
         area={pick?.data ?? null}
-        date={date}
+        {...(adding && data && { title: stayTitle(savedNow(data)) ?? undefined })}
+        date={adding?.date ?? date}
+        {...(adding && { back: { label: T.plan, aria: T.backToPlan } })}
+        {...(dayNo && { dayNo })}
+        {...(carried?.length && { chosen: carried })}
+        span={{ start: dayStart, end: dayEnd }}
+        {...(dayNo && dayNo < total && { room: { minutes: dayEnd - dayStart, next: dayNo + 1 } })}
         note={picking && progress?.more ? T.findingMore : picking && partial ? T.partial : ''}
         onDone={(d: AreaData, mustIds: string[], pins: Picked[], since: number, opts: { fill: boolean; start?: number; end?: number; example?: boolean }) => {
           const wasPartial = picking && partial
@@ -1819,7 +2314,7 @@ export default function App() {
           // 同じ曜日の種類と時間帯なら、同梱の時刻表をすぐに使う（取りに行って組み直さない）。例のプランは、例の出発と帰る時刻で比べる
           const st = opts.start ?? start
           const en = opts.end ?? end
-          const day = opts.example ? nextSaturday() : date
+          const day = opts.example ? nextSaturday() : (adding?.date ?? date)
           if (pack && isHoliday(pack.date) === isHoliday(day) && pack.start === st && pack.end === en) {
             const { date: _date, start: _start, end: _end, sources, ...table } = pack
             packed.current = { data: area, date: day, start: st, end: en }
@@ -1827,11 +2322,45 @@ export default function App() {
             setBusTable({ date: day, table, sources })
             setReady(area.area.name)
           }
-          setTripSince(since)
-          setNudgeSince(since)
-          if (!favDone.current.has(since)) setFavSince(since)
+          if (adding && data) {
+            // 旅に次の日を加える。since は旅の始まりのまま（全日で 1 つの旅）
+            const cur = savedNow(data)
+            const added = addDayTo(cur, cur)
+            setDays(added.days ?? null)
+            setDayAt(added.day ?? 0)
+            setPlanDays(plannedDays(added))
+            setDate(adding.date)
+            // まとめにその日の時刻があれば使い、無ければ前の日の時刻を引き継ぐ
+            const want = dayWants(cur, adding.n)
+            if (want?.start !== undefined || want?.end !== undefined) {
+              const st = want.start ?? start
+              setStart(st)
+              setEnd(fitEnd(st, want.end ?? end))
+            }
+            setNudgeSince(0)
+            setFavSince(0)
+            setAdding(null)
+            const total = plannedDays(added)
+            carryAsk.current = { next: adding.n < total ? adding.n + 1 : null, at: Date.now() }
+          } else {
+            setDays(null)
+            setDayAt(0)
+            setPlanDays(opts.example ? 1 : formDays)
+            const st = !opts.example && formDays > 1 ? formStay.current : null
+            setStays(st?.stays ?? [])
+            setTripEnd(st ? st.end : undefined)
+            setWants(!opts.example && formDays > 1 ? formWants.current : undefined)
+            setCarry([])
+            carryAsk.current = !opts.example && formDays > 1 ? { next: 2, at: Date.now() } : null
+            setTripSince(since)
+            setEdited(false)
+            setNudgeSince(since)
+            if (!favDone.current.has(since)) setFavSince(since)
+          }
+          farAsk.current = true
           setPartial(wasPartial)
           setMust(mustIds)
+          if (carryAsk.current) setLoose(mustIds)
           setPinned(pins)
           setFill(opts.fill)
           if (opts.start !== undefined) setStart(opts.start)
@@ -1846,11 +2375,19 @@ export default function App() {
           }
           namedSeen.current = new Set(d.places.filter((p) => p.named).map((p) => p.id))
         }}
-        onOtherArea={() => startNew()}
+        onOtherArea={() => {
+          if (adding) cancelAdd()
+          startNew(adding ? 'plan' : undefined)
+        }}
         onHome={() => {
-          // 集めている途中の候補は取りやめて、ホーム画面へ
-          stopPicking()
+          // 集めている途中の候補は取りやめて、ホーム画面へ（次の日を加えている途中なら、元の日のプランへ）
           markBack()
+          if (adding) {
+            cancelAdd()
+            setView('plan')
+            return
+          }
+          stopPicking()
           setView('home')
         }}
         onFail={() => {
@@ -1866,8 +2403,19 @@ export default function App() {
       <PlanForm
         from={from}
         to={to}
+        stays={stayForms}
+        sameStay={sameStay}
+        onSameStay={(v) => {
+          setSameStay(v)
+          if (v) stayForms.slice(1).forEach((f) => f.set('', null))
+        }}
         back={back}
         wish={wish}
+        car={carTrip}
+        onCar={(v) => {
+          carTouched.current = true
+          setCarTrip(v)
+        }}
         date={date}
         start={start}
         end={end}
@@ -1889,34 +2437,67 @@ export default function App() {
         }}
         onTo={to.setText}
         onBack={setBack}
-        onWish={setWish}
+        onWish={(v) => {
+          setWish(v)
+          const said = mentionsCar(v)
+          if (said !== null && !carTouched.current) setCarTrip(said)
+        }}
         onDate={setDate}
         onStart={setStart}
         onEnd={setEnd}
+        days={formDays}
+        onDays={(n) => {
+          setFormDays(n)
+          stayForms.forEach((f, k) => k >= n - 1 && f.set('', null))
+        }}
         leeway={leeway}
         onLeeway={setLeeway}
         onSubmit={create}
         onCancel={busy ? cancelJob : () => leaveForm(formFrom)}
+        kind={formKind}
+        onKind={switchKind}
+        formNote={formNote}
+        talk={{
+          talk,
+          question: nextQuestion(talk, talkPassed, !!talkLast),
+          last: talkLast,
+          busy: talkBusy,
+          error: talkError,
+          ready: talkReady(talk),
+          showDate: !!talk.date || talkPassed.includes('date'),
+          onSend: talkSend,
+          onSkip: () => {
+            if (busy) return
+            const q = nextQuestion(talk, talkPassed, !!talkLast)
+            setTalkPassed((x) => (x.includes(q) ? x : [...x, q]))
+          },
+          onManual: () => {
+            if (!busy) toStayForm('')
+          },
+        }}
       />
     )
   }
 
   const skyLabel = weather ? weatherLabel(weather.code) : ''
+  // 上の見出しなどに見せる題（宿を入れた旅は全日で同じ）
+  const shownName = stayTitle(savedNow(data)) ?? data.area.name
   const header = (
     <header className="top" ref={topRef}>
       <HomeButton
         onClick={() => {
+          if (addWait) cancelAdd()
           closePlanSheets()
           setView('home')
         }}
       />
       <div className="top-title">
         <Heading level={1} maxLines={1} hasTruncateTooltip={false}>
-          {data.area.name}
+          {shownName}
         </Heading>
         <Text as="p" display="block" type="supporting">
-          <span className="num">{dateLabel(date)}</span>
-          {weather && (
+          <span className="num">{dateLabel(addWait && adding ? adding.date : date)}</span>
+          {weather && !addWait && (
             <span className="num sky" title={skyLabel}>
               <WeatherIcon sky={weatherSky(weather.code)} label={skyLabel} />
               {weather.max}℃/{weather.min}℃
@@ -1925,8 +2506,8 @@ export default function App() {
         </Text>
       </div>
       <div className="top-actions">
-        <ShareMenu disabled={!plan} onText={share} onImage={() => setPlanImage(true)} />
-        <Button variant="secondary" label={hasServer ? T.adjust : T.adjustPlain} isDisabled={!plan} onClick={() => { setOpenId(null); setCandId(null); setBusSheet(null); setTransitIdx(null); setWalkIdx(null); setAdjust(true) }} />
+        <ShareMenu disabled={!plan || addWait} onText={share} onImage={() => setPlanImage(true)} />
+        <Button variant="secondary" label={hasServer ? T.adjust : T.adjustPlain} icon={hasServer ? <SparkIcon size={16} /> : undefined} isDisabled={!plan || addWait} onClick={() => { setOpenId(null); setCandId(null); setBusSheet(null); setTransitIdx(null); setWalkIdx(null); setAdjust(true) }} />
       </div>
     </header>
   )
@@ -1948,6 +2529,30 @@ export default function App() {
   }
 
   const late = plan.finish - end
+  // 何日かある旅の、予定している全日の日付（加えている途中の日も入れる）と、次の日を加えられるか。例のプランは作った日だけ
+  const savedHere = savedNow(data)
+  const made = allDays(savedHere).length
+  const dayDates = tabDates(savedHere, adding?.n)
+  const roomForDay = !data.demo && canAddDay(savedHere, LIMITS.state)
+  const lastDay = !days || dayAt === days.length - 1
+  // 開いている日の出発地・到着地が宿か。宿の欄は、これから作る日があるときだけシートに出す
+  const ends = stayEnds({ data }, stays)
+  const planned = plannedDays(savedHere)
+  // シートの宿の欄: これから作る日に効く泊（made+1 泊目〜最後の泊）と、離れすぎの一言（前の泊の宿か前の日の終わりの場所から、最後は観光を終える場所まで）
+  const sheetNights = Array.from({ length: Math.max(0, planned - 1 - made) }, (_, k) => made + 1 + k)
+  const nightBefore = nightStay(stays, made - 1)
+  const stayGoal = tripGoal(savedHere) ?? allDays(savedHere)[0].data.query?.start ?? null
+  const sheetFields = shownNights(sheetNights, sheetSame).map((_, j) => staySheets[j])
+  const stayFar = adjust && sheetNights.length ? stayFarTexts(hitOf(nightBefore ?? dayGoal(allDays(savedHere)[made - 1])), sheetFields.map((f) => (f.text.trim() ? f.hit : null)), stayGoal ? hitOf(stayGoal) : null, !!nightBefore) : []
+  const canAdd = lastDay && plan.stops.length > 0 && roomForDay
+  // 泊まりの旅か（入りきらない場所は消さずに、まだ入れていない場所に回す）と、開いている日の次の日（最終日は null）
+  const multi = !data.demo && planned > 1
+  const nextDay = multi && dayAt + 1 < planned ? dayAt + 2 : null
+  const pickDay = (i: number) => {
+    if (adding) return
+    if (i < made) openDay(i)
+    else if (i === made) startAddDay()
+  }
   // スケジュールの見出しを、上に貼り付いた見出しのすぐ下まで送る
   const toSchedule = () => {
     const el = document.querySelector('.schedule')
@@ -1965,12 +2570,6 @@ export default function App() {
     const light = plan.stops.filter((s) => s.slot === 'sight' || s.slot === 'cafe')
     return byLength(light.length ? light : plan.stops)
   })()
-  // 書いた希望（長いときは頭だけ）と、希望が効いた場所の数
-  const wishText = (data.query?.wish ?? wish).trim()
-  const wishShown = cutWish(wishText, T.wishMax)
-  // 数えるのは、書いた希望から読み取った条件（data.conditions）に合った場所だけ。調整で条件を外したり足したりしても、引いた希望の言葉と数がずれない
-  const wishLabels = new Set(data.conditions.map((c) => c.label))
-  const fitN = plan.stops.filter((s) => s.fits.some((f) => wishLabels.has(f))).length
   const wear = weather ? wearFor(weather, plan.leave, plan.finish) : null
   const openIndex = open ? plan.stops.indexOf(open) : -1
   // 区間だけを見ている画面（便を選ぶ・乗換を入れる）の区間。地図はその区間を濃くし、映す範囲もその区間に合わせる
@@ -1997,7 +2596,7 @@ export default function App() {
   // 区間の手段を選ぶ（null は自動に戻す）。歩くにしても、その区間に入れた経路・便は取っておく（自動や電車・バスに戻すと、また使う）
   const chooseMode = (i: number, m: LegMode | null) => {
     const { key } = legAt(i)
-    edit([{ t: m === 'walk' ? T.legWalk : m === 'transit' ? T.legTransit : T.legAuto }], () => {
+    edit([{ t: m === 'walk' ? T.legWalk : m === 'transit' ? T.legTransit : m === 'car' ? T.legCar : T.legAuto }], () => {
       setModes((x) => {
         const n = { ...x }
         if (m) n[key] = m
@@ -2010,6 +2609,22 @@ export default function App() {
     setWalkIdx(null)
   }
 
+  // 次の日の候補を検索している間は、前の日のプランを見せず、1日目を作るときと同じ進み具合を出す
+  if (addWait && busy) {
+    return (
+      <div className="plan-view">
+        {header}
+        <div className="map-pane">
+          <MapPart data={data} plan={null} focusId={null} candidates={[]} onOpen={() => {}} onCandidate={() => {}} onNotice={notice} />
+        </div>
+        <main className="panel" aria-busy="true">
+          {dayDates && <DayTabs dates={dayDates} made={made} at={adding ? adding.n - 1 : dayAt} next={false} onPick={pickDay} />}
+          {showSearchWait(busy) ? <SearchWait busy={busy} onCancel={cancelAdd} /> : <DayStatus busy error="" />}
+        </main>
+      </div>
+    )
+  }
+
   return (
     <div className="plan-view">
       {header}
@@ -2017,6 +2632,7 @@ export default function App() {
         <MapPart
           data={data}
           plan={plan}
+          car={car}
           focusId={openId}
           candidates={candidates}
           candId={peekId ?? pickerShow ?? candId}
@@ -2036,7 +2652,7 @@ export default function App() {
             const leg = i === plan.stops.length ? plan.back : plan.stops[i]?.leg
             if (!leg) return
             closeOthers()
-            if (leg.mode === 'walk') setWalkIdx(i)
+            if (leg.mode !== 'transit') setWalkIdx(i)
             else if (legOpensBus(leg, buses[i])) openBus(i)
             else setTransitIdx(i)
           }}
@@ -2055,6 +2671,9 @@ export default function App() {
 
       <main className="panel" aria-busy={pending}>
         {data.demo && <DemoOwn area={data.area.name} onOwn={() => startNew('plan')} />}
+        {dayDates && <DayTabs dates={dayDates} made={made} at={adding ? adding.n - 1 : dayAt} next={roomForDay && !busy} onPick={pickDay} />}
+        {!data.demo && <DayStatus busy={!!busy && !!adding} error={addError} />}
+        {dayDates && carry.length > 0 && <CarryLine names={carry.map((p) => p.name)} />}
         {today && <NextCard plan={plan} now={now} onOpen={setOpenId} />}
         {offer && <PlanOffer offer={offer} onTake={takeOffer} onKeep={() => setOffer(null)} />}
         {!today && plan.stops[0] && (
@@ -2071,58 +2690,76 @@ export default function App() {
           </button>
         )}
         <Card className="summary" role="region" aria-label={T.summary} padding={4}>
+          <div className="sum-trip">
+            <LookForward data={data} plan={plan} input={input} date={date} />
+            <button type="button" className="sum-time-row" aria-label={`${T.timeRange(fmt(plan.leave), fmt(plan.finish))}${T.listSep}${T.stopsN(plan.stops.length)}${T.listSep}${T.breakdown}`} onClick={() => setStatsOpen(true)}>
+              <span className="sum-time num" aria-hidden="true">
+                {fmt(plan.leave)}–{fmt(plan.finish)}
+              </span>
+              <span className="sum-count num" aria-hidden="true">
+                {T.stopsN(plan.stops.length)}
+              </span>
+              <Icon icon="chevronRight" color="inherit" size="xsm" />
+            </button>
+          </div>
           <Compare plan={plan} usual={usual} end={end} />
-          <CrowdSwap data={data} plan={plan} input={input} onSwap={(from, to) => swap(from, to, false)} />
-          <LookForward data={data} plan={plan} input={input} date={date} />
-          <p className="sum-time num" aria-label={T.timeRange(fmt(plan.leave), fmt(plan.finish))}>
-            {fmt(plan.leave)}–{fmt(plan.finish)}
-          </p>
-          <dl className="sum-stats num" aria-label={T.breakdown}>
-            {(
-              [
-                [T.placesL, T.stopsN(plan.stops.length)],
-                [T.stayN, fmtDur(stayTotal)],
-                [T.movingL, fmtDur(plan.moving)],
-                [T.waitL, fmtDur(slack)],
-              ] as [string, string][]
-            )
-              .filter(([k]) => k !== T.waitL || slack > 0)
-              .map(([k, v]) => (
-                <div key={k}>
-                  <dt>{k}</dt>
-                  <dd>{v}</dd>
-                </div>
-              ))}
-          </dl>
-          {late > 0 && <p className="note warn num">{T.late(fmtDur(late), !!data.end, fmt(end))}</p>}
-          {late > 0 && fitAsk.length > 0 && (
-            <div className="sum-fit" role="group" aria-labelledby="sum-fit-q">
-              <p className="note" id="sum-fit-q">
-                {T.fitAsk}
-              </p>
-              <div className="sum-fit-list">
-                {fitAsk.map((s) => (
-                  <Button key={s.spot.id} variant="secondary" size="sm" label={T.fitDrop(s.spot.name)} onClick={() => removeStop(s)}>
-                    {s.spot.name}
-                  </Button>
-                ))}
-              </div>
-            </div>
-          )}
-          {-late - leeway >= 30 && (
-            <Text as="p" display="block" type="supporting" className="note num">
-              {T.early(fmtDur(-late), !!data.end, fmt(end))}
-            </Text>
-          )}
-          {-late - leeway >= 60 && !fill && (
-            <Button variant="secondary" size="sm" className="sum-fill" label={T.fillMore} onClick={() => edit([{ t: T.fillDone }], () => setFill(true))} />
-          )}
-          {wishShown && fitN > 0 && (
-            <Text as="p" display="block" type="supporting" className="note">
-              {T.wishFit(wishShown, fitN)}
-            </Text>
-          )}
         </Card>
+        <CrowdSwap
+          data={data}
+          plan={plan}
+          input={input}
+          onOpen={() => {
+            closeOthers()
+            setCrowdOpen(true)
+          }}
+        />
+        {late > 0 && <p className="note sum-note warn num">{keepWhole(T.late(fmtDur(late), !!data.end || ends.to, fmt(end)), fmtDur(late), fmt(end))}</p>}
+        {late > 0 && fitAsk.length > 0 && (
+          <div className="sum-fit" role="group" aria-labelledby="sum-fit-q">
+            <p className="note" id="sum-fit-q">
+              {nextDay ? T.fitAskNext(nextDay) : T.fitAsk}
+            </p>
+            <div className="sum-fit-list">
+              {fitAsk.map((s) => (
+                <Button key={s.spot.id} variant="secondary" size="sm" label={nextDay ? T.fitCarry(s.spot.name, nextDay) : T.fitDrop(s.spot.name)} onClick={() => (multi ? carryStop(s, nextDay) : removeStop(s))}>
+                  {s.spot.name}
+                </Button>
+              ))}
+            </div>
+          </div>
+        )}
+        {-late - leeway >= 60 && !fill && (
+          <button type="button" className="sum-link num" onClick={() => edit([{ t: T.fillDone }], () => setFill(true))}>
+            <span>{keepWhole(T.early(fmtDur(-late), !!data.end || ends.to, fmt(end)), fmtDur(-late), fmt(end))}</span>
+            <span className="sum-link-do">{T.fillShort}</span>
+          </button>
+        )}
+        {statsOpen && (
+          <Sheet title={T.breakdown} lead={`${fmt(plan.leave)}–${fmt(plan.finish)}`} onClose={() => setStatsOpen(false)} card>
+            <dl className="sum-stats num">
+              {(
+                [
+                  [T.placesL, T.stopsN(plan.stops.length)],
+                  [T.stayN, fmtDur(stayTotal)],
+                  [T.movingL, fmtDur(plan.moving)],
+                  [T.waitL, fmtDur(slack)],
+                ] as [string, string][]
+              )
+                .filter(([k]) => k !== T.waitL || slack > 0)
+                .map(([k, v]) => (
+                  <div key={k}>
+                    <dt>{k}</dt>
+                    <dd>{v}</dd>
+                  </div>
+                ))}
+            </dl>
+            {-late - leeway >= 30 && (
+              <Text as="p" display="block" type="supporting" className="note num">
+                {T.early(fmtDur(-late), !!data.end || ends.to, fmt(end))}
+              </Text>
+            )}
+          </Sheet>
+        )}
 
         <section className="schedule" aria-labelledby="route-title">
           <div className="sec-head">
@@ -2142,7 +2779,6 @@ export default function App() {
             plan={plan}
             date={date}
             changed={changed}
-            auto={new Set(plan.stops.map((s) => s.spot.id).filter((id) => !must.includes(id) && !pinned.some((p) => p.id === id)))}
             buses={buses}
             slopes={slope.slopes}
             onOpen={setOpenId}
@@ -2155,6 +2791,7 @@ export default function App() {
             onMove={moveStop}
             onMoveTo={moveStopTo}
             editing={editing && plan.stops.length > 1}
+            stay={ends}
           />
         </section>
 
@@ -2190,18 +2827,19 @@ export default function App() {
         {nudgeSince > 0 && nudgeSince === tripSince && <SaveNudge since={nudgeSince} />}
 
         {penguinLines && !penguinOff ? (
-          <PenguinNote lines={penguinLines} onClose={() => setPenguinOff(true)} />
+          <PenguinNote lines={penguinLines} open onToggle={() => setPenguinOff(true)} />
         ) : (
           <>
             {wear && <WearCard wear={wear} />}
-            {penguinOff && hasServer && (
-              <Button variant="ghost" className="penguin-back" label={T.penguinBack} icon={<PenguinMark size={22} />} onClick={() => setPenguinOff(false)} />
-            )}
+            {penguinOff && hasServer && <PenguinNote lines={[]} open={false} onToggle={() => setPenguinOff(false)} />}
           </>
         )}
         <TripOdai area={data.area.name} date={dateLabel(date)} plan={plan} count={odaiCount} level={odaiLevel} since={tripSince} early={daysUntil(date) > 0} onLevel={(v) => { setOdaiLevel(v); saveLevel(v) }} onOpen={setOpenId} onNotice={notice} />
-        <section className="recap-entry" aria-label={T.recap}>
-          <Button variant="secondary" size="lg" width="100%" label={T.recapOpen} onClick={() => setRecap(true)} />
+        {/* 上の「旅のミッション」と同じ形の札。印は ›（その場で開くのではなく、振り返りの画面へ進む） */}
+        <section className="recap-entry odai odai-fold" aria-label={T.recap}>
+          <button type="button" className="odai-toggle recap-open" onClick={() => setRecap(true)}>
+            {T.recapOpen}
+          </button>
         </section>
 
         <footer className="plan-foot">
@@ -2213,7 +2851,7 @@ export default function App() {
                 : partial
                   ? T.footPartial
                   : ''}
-            {T.footEstimate}
+            {car ? T.footCar : T.footEstimate}
           </p>
           {busShown && (
             <BusCredit sources={busSources} contact={busInfo.contact} className="note foot" />
@@ -2325,9 +2963,10 @@ export default function App() {
           /></Suspense>
         )
       })()}
+      {crowdOpen && <CrowdSwapSheet data={data} plan={plan} input={input} onSwap={(from, to) => swap(from, to, false)} onClose={() => setCrowdOpen(false)} />}
       {walkIdx !== null && walkIdx <= plan.stops.length && (() => {
         const { from, to, leg } = legAt(walkIdx)
-        return <LegModeSheet fromName={from.name} toName={to.name} leg={leg} onMode={(m) => chooseMode(walkIdx, m)} onClose={() => setWalkIdx(null)} />
+        return <LegModeSheet fromName={from.name} toName={to.name} leg={leg} slope={slope.slopes?.[walkIdx]} car={car} onMode={(m) => chooseMode(walkIdx, m)} onClose={() => setWalkIdx(null)} />
       })()}
       {open && peekSpot && (
         <CandidateSheet
@@ -2356,6 +2995,7 @@ export default function App() {
           onRemove={removeStop}
           onFocus={toggleFocus}
           focused={focus.includes(open.spot.id)}
+          auto={!must.includes(open.spot.id) && !pinned.some((p) => p.id === open.spot.id)}
           fixed={stayFix[open.spot.id] !== undefined}
           date={dateLabel(date)}
           planDate={date}
@@ -2441,13 +3081,67 @@ export default function App() {
           leeway={leeway}
           onLeeway={fresh(setLeeway)}
           onNew={() => startNew()}
-          onClose={closeAdjust}
+          dayNo={dayAt + 1}
+          {...(!data.demo && {
+            days: {
+              made,
+              planned,
+              max: roomForDay ? DAYS_MAX : made,
+              onPlanned: (n: number) => {
+                setPlanDays(n)
+                if (n > 1) return
+                staySheets.forEach((f) => f.set('', null))
+                setStays([])
+                setTripEnd(undefined)
+                setWants(undefined)
+                setCarry([])
+              },
+              ...(canAdd && {
+                onAdd: () => {
+                  if (stayFar.some(Boolean)) {
+                    showStayNote()
+                    return
+                  }
+                  void commitStay().then((put) => {
+                    if (!put) {
+                      showStayNote()
+                      return
+                    }
+                    closeAdjust()
+                    startAddDay(put)
+                  })
+                },
+              }),
+              ...(made > 1 && { onDelete: deleteDay }),
+            },
+          })}
+          {...(!data.demo && sheetNights.length > 0 && {
+            stay: {
+              fields: staySheets,
+              nights: sheetNights,
+              same: sheetSame,
+              onSame: (v: boolean) => {
+                setSheetSame(v)
+                if (v) staySheets.slice(1).forEach((f) => f.set('', null))
+              },
+              far: stayFar,
+              near: sheetNear(savedNow(data)),
+            },
+          })}
+          stayEnds={ends}
+          onClose={() => {
+            void commitStay().then((put) => {
+              if (put) closeAdjust()
+              else showStayNote()
+            })
+          }}
           pace={pace}
           moveLess={moveLess}
           calm={calm}
           onMoveLess={changeMoveLess}
           onCalm={changeCalm}
           onQuick={(f) => changePace(pace === f ? 'normal' : f)}
+          {...(!data.demo && { car: { on: carTrip, onChange: changeCar } })}
           skipDistricts={skipDistricts}
           onSkipDistricts={changeDistricts}
           onPick={() => {
@@ -2482,8 +3176,8 @@ export default function App() {
           onNotice={notice}
         />
       )}
-      {planImage && plan && <Suspense fallback={null}><PlanImage data={data} date={dateLabel(date)} plan={plan} buses={buses} onClose={() => setPlanImage(false)} onNotice={notice} /></Suspense>}
-      {recap && plan && <Suspense fallback={null}><Recap area={data.area.name} date={dateLabel(date)} planDate={date} data={data} input={input} plan={plan} usual={usual} buses={buses} since={tripSince} onClose={() => {
+      {planImage && plan && <Suspense fallback={null}><PlanImage data={data} name={shownName} date={dateLabel(date)} plan={plan} buses={buses} onClose={() => setPlanImage(false)} onNotice={notice} /></Suspense>}
+      {recap && plan && <Suspense fallback={null}><Recap area={data.area.name} name={shownName} date={dateLabel(date)} planDate={date} data={data} input={input} plan={plan} usual={usual} buses={buses} since={tripSince} onClose={() => {
             clearRecapOnOpen()
             setRecap(false)
           }} onNotice={notice} onWhy={(id) => {

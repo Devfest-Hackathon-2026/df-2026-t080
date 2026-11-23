@@ -16,7 +16,7 @@ import type { Plan } from './planner'
 import { roleText } from './found'
 import { busName, creditItems, isTrain } from './bus'
 import { boardStops, legPieces, shortLine, type Piece } from './legPieces'
-import { busColor, lineEdge, railColor, stepColor } from './lineColor'
+import { busColor, lineEdge, lineEdgeGrow, railColor, stepColor } from './lineColor'
 import { separate, shortName, type Box, type Pt } from './mapLayer'
 import type { Mode } from './modeShape'
 import { RECAP_WORDS } from './recap'
@@ -36,7 +36,7 @@ const T = tr({
     mins: (m: number) => `${m}分`,
     about: (m: number) => `約${m}分`,
     ease: (m: number) => `ゆとり ${m}分`,
-    wait: (m: number) => `開くまで ${m}分`,
+    wait: (m: number) => `営業開始まで ${m}分`,
     other: '乗り物',
     finale: '旅の締めくくり',
     timetable: (s: string) => `時刻表: ${s}`,
@@ -99,7 +99,7 @@ function legTrip(leg: Leg, found: BusTrip | undefined): BusTrip | undefined {
 // ---- 地図 ----
 
 type Rect = { x: number; y: number; w: number; h: number }
-type MapLeg = { coords: LL[]; mode: 'walk' | 'transit'; pieces: Piece[] | null; back: boolean; idx: number }
+type MapLeg = { coords: LL[]; mode: Leg['mode']; pieces: Piece[] | null; back: boolean; idx: number }
 
 const S = 2 // 画面の地図の 1px が、画像の何 px か
 const PIN = 24 * S
@@ -251,7 +251,7 @@ function drawLegs(c: CanvasRenderingContext2D, legs: MapLeg[], at: (p: LL) => Pt
         continue
       }
       const color = p.color ?? ROUTE
-      strokeLine(c, pts, p.color ? lineEdge(color, false, land) : land, (l.back ? 6 : 7) * S, alpha)
+      strokeLine(c, pts, p.color ? lineEdge(color, false, land) : land, ((l.back ? 6 : 7) + (p.color ? lineEdgeGrow(color, false, land) : 0)) * S, alpha)
       strokeLine(c, pts, color, (l.back ? 3 : 4) * S, alpha)
     }
   }
@@ -473,13 +473,13 @@ function legBits(leg: Leg, found: BusTrip | undefined, ease: number, wait: numbe
       [{ icon: 'train', text: leg.label }, ...notes],
     ]
   }
-  return [[{ icon: leg.mode === 'walk' ? 'walk' : 'train', text: leg.label }, ...notes]]
+  return [[{ icon: leg.mode === 'walk' ? 'walk' : leg.mode === 'car' ? 'car' : 'train', text: leg.label }, ...notes]]
 }
 
 type Row =
   | { kind: 'end'; time: number; name: string; meta: string }
   | { kind: 'stop'; no: number; time: number; name: string; meta: string; finale: boolean }
-  | { kind: 'leg'; mode: 'walk' | 'transit'; choices: Bit[][] }
+  | { kind: 'leg'; mode: Leg['mode']; choices: Bit[][] }
 
 function scheduleRows(input: PlanImageInput): Row[] {
   const { plan, start } = input
@@ -555,10 +555,10 @@ function pickBits(c: CanvasRenderingContext2D, choices: Bit[][], z: Size): Bit[]
   return out
 }
 
-// 線路（札と札の間の線）。電車・バスは実線、徒歩は点の線
-function drawRail(c: CanvasRenderingContext2D, y1: number, y2: number, mode: 'walk' | 'transit', z: Size) {
+// 線路（札と札の間の線）。電車・バスと車は実線、徒歩は点の線
+function drawRail(c: CanvasRenderingContext2D, y1: number, y2: number, mode: Leg['mode'], z: Size) {
   c.fillStyle = ROUTE
-  if (mode === 'transit') {
+  if (mode !== 'walk') {
     c.fillRect(RAIL_X - z.rail / 2, y1, z.rail, y2 - y1)
     return
   }

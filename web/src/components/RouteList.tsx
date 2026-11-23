@@ -1,5 +1,5 @@
 import { useWalkDots } from '../lib/walkRail'
-import { Fragment, useRef, useState, type KeyboardEvent, type PointerEvent } from 'react'
+import { Fragment, useRef, useState, type CSSProperties, type KeyboardEvent, type PointerEvent } from 'react'
 import { Icon } from '@astryxdesign/core/Icon'
 import { IconButton } from '@astryxdesign/core/IconButton'
 import type { AreaData, BusTrip } from '../types'
@@ -11,19 +11,20 @@ import { sunsetMin } from '../lib/sun'
 import { goalOf, type Leg } from '../lib/geo'
 import { busName, isTrain } from '../lib/bus'
 import { busColor, railColor, stepColor } from '../lib/lineColor'
-import { LineMark } from './LineMark'
+import { LineChip } from './LineChip'
 import { CrowdMark } from './CrowdMark'
 import { ModeIcon } from './ModeIcon'
 import { Thumb } from './Thumb'
-import { isEn, tr } from '../lib/i18n'
+import { tr } from '../lib/i18n'
 import { slopeLook, type Slope } from '../lib/slope'
-import { distText, useWalkMeters } from '../lib/walkDist'
 
 const T = tr({
   ja: {
     schedule: 'スケジュール',
     depart: '出発',
     arrive: '到着',
+    leaveStay: '宿を出発',
+    arriveStay: '宿に到着',
     finale: '旅の締めくくり',
     finaleWhy: (w: string) => `（${w}）`,
     finaleGap: '',
@@ -32,31 +33,31 @@ const T = tr({
     whyView: '眺めが良い',
     whyCalm: '静かに過ごせる',
     whyRest: 'ひと休み',
-    fits: '希望に合う',
-    auto: 'おまかせで追加',
-    closes: (t: string) => `${t}に閉まります（目安）`,
+    closes: (t: string) => `${t}に営業終了（目安）`,
     reserve: '要予約',
     sunset: '日没後',
-    reorder: (name: string) => `${name}の順番を変える`,
-    drag: 'なぞって順番を変える',
-    up: (name: string) => `${name}を1つ前にする`,
-    down: (name: string) => `${name}を1つ後にする`,
+    reorder: (name: string) => `${name}の順番を変更`,
+    drag: 'ドラッグして並べ替え',
+    up: (name: string) => `${name}を1つ前へ移動`,
+    down: (name: string) => `${name}を1つ後ろへ移動`,
     sep: '・',
-    wait: (m: number) => `営業開始まで${m}分（目安）`,
+    wait: (m: number) => `営業開始まで${m}分`,
     mins: (m: number, about: boolean) => `${about ? '約' : ''}${m}分`,
     then: ' → ',
     legOf: (a: string, b: string) => `${a}から${b}`,
     seeTrips: '便を見る',
-    seeRail: '乗る駅を見る',
+    seeRail: '乗車駅を見る',
     seeRoute: '経路と時刻を見る',
-    seeMode: '移動の手段を選ぶ',
+    seeMode: '移動の手段を選択',
     missed: (t: string) => `${t}発に間に合いません`,
-    unused: (t: string) => `${t}発の時刻は使っていません`,
+    unused: (t: string) => `${t}発の時刻は使用していません`,
   },
   en: {
     schedule: 'Schedule',
     depart: 'Depart',
     arrive: 'Arrive',
+    leaveStay: 'Leave Lodging',
+    arriveStay: 'Arrive at Lodging',
     finale: 'Trip Finale',
     finaleWhy: (w: string) => `(${w})`,
     finaleGap: ' ',
@@ -65,8 +66,6 @@ const T = tr({
     whyView: 'great views',
     whyCalm: 'quiet and calm',
     whyRest: 'a break',
-    fits: 'Matches your wish',
-    auto: 'Added for you',
     closes: (t: string) => `Closes at ${t} (estimate)`,
     reserve: 'Reservation needed',
     sunset: 'After sunset',
@@ -75,7 +74,7 @@ const T = tr({
     up: (name: string) => `Move ${name} up`,
     down: (name: string) => `Move ${name} down`,
     sep: ' · ',
-    wait: (m: number) => `${m} min until opening (estimate)`,
+    wait: (m: number) => `${m} min until opening`,
     mins: (m: number, about: boolean) => `${about ? '~' : ''}${m} min`,
     then: ' → ',
     legOf: (a: string, b: string) => `${a} to ${b}`,
@@ -92,7 +91,7 @@ const pad = (n: number) => String(n)
 
 // 旅の締めくくりにした訳（組み立ての、一日の最後に向いた場所の選び方に合わせる）
 const VIEW_TAGS = ['景色', '海', '水辺', '夜景']
-function finaleWhy(s: Plan['stops'][number], date: string): string {
+export function finaleWhy(s: Plan['stops'][number], date: string): string {
   if (s.slot === 'cafe') return T.whyRest
   if (s.slot === 'sight' && s.spot.best === 'evening' && s.arrive >= 16 * 60 + 30) return T.whyEvening
   if (s.slot === 'sight' && s.spot.tags.some((t) => VIEW_TAGS.includes(t))) {
@@ -101,9 +100,30 @@ function finaleWhy(s: Plan['stops'][number], date: string): string {
   }
   return T.whyCalm
 }
-// 区間の行の語の区切り。区切りは前の語の後ろに付け、英語は区切りのあとの空白でだけ折り返す
-const SEP_END = isEn ? '\u00a0·' : '・'
-const GAP = isEn ? ' ' : ''
+// 旅の締めくくりの言葉（訳を添える）。場所の画面に出す
+export const finaleText = (s: Plan['stops'][number], date: string) => `${T.finale}${T.finaleGap}${T.finaleWhy(finaleWhy(s, date))}`
+
+// 区間の路線（便・電車の目安・入れた経路）と、路線図の線の色。路線が 1 つで色が分かる区間だけ色を返す
+function legLines(leg: Leg, bus?: BusTrip) {
+  const picked = leg.real?.bus
+  const trip = picked ?? (leg.real ? undefined : bus)
+  const rides = leg.real && !picked ? leg.real.steps.filter((x) => x.mode !== 'walk') : []
+  const rail = !trip && !leg.real && leg.mode === 'transit' ? leg.rail : undefined
+  const lines = trip
+    ? [{ name: busName(trip), color: busColor(trip) }]
+    : rail
+      ? [{ name: rail.line, color: railColor(rail) }]
+      : rides.map((x) => ({ name: x.line, color: stepColor(x, leg.real!) }))
+  return { picked, trip, rides, rail, lines }
+}
+export function legRailColor(leg: Leg, bus?: BusTrip): string | undefined {
+  if (leg.mode !== 'transit') return undefined
+  const colors = [...new Set(legLines(leg, bus).lines.map((x) => x.color))]
+  return colors.length === 1 && colors[0] ? colors[0] : undefined
+}
+type RailVars = CSSProperties & { '--rail-in'?: string; '--rail-out'?: string; '--rail'?: string }
+const railVars = (inC?: string, outC?: string): RailVars | undefined =>
+  inC || outC ? { ...(inC && { '--rail-in': inC }), ...(outC && { '--rail-out': outC }) } : undefined
 
 // スケジュールを「自分だけの路線図」として描く。駅ナンバリングのような札でつなぎ、
 // 公共交通機関の区間は太い実線、徒歩の区間は点線（マップの線と同じ形）。
@@ -112,7 +132,6 @@ export function RouteList({
   plan,
   date,
   changed,
-  auto,
   buses,
   slopes,
   onOpen,
@@ -122,27 +141,28 @@ export function RouteList({
   onMove,
   onMoveTo,
   editing = false,
+  stay,
 }: {
   data: AreaData
   plan: Plan
   date: string // プランの日付（日の入りを求める）
   // 手を入れたあとに、新しく入った・動いた場所（数秒だけ印を付ける）
   changed?: Set<string>
-  // 自分で選んでいない（おまかせで足した）場所。「場所を足す・外す」で外せる
-  auto?: Set<string>
   buses?: (BusTrip | undefined)[] // 区間ごとの、時刻表から探したいちばん早く着くバスの便
-  slopes?: (Slope | null)[] // 区間ごとの、歩く所の上り下り
+  slopes?: (Slope | null)[] // 区間ごとの上り下り（徒歩の区間の行に出す）
   onOpen: (id: string) => void
   onTransit: (index: number) => void
   onBus?: (index: number) => void
-  onWalk?: (index: number) => void // 歩く区間を押したとき（移動の手段を選ぶ）
+  onWalk?: (index: number) => void // 歩く区間を押したとき（移動の手段を選択）
   onMove?: (id: string, delta: number) => void
   onMoveTo?: (id: string, to: number) => void
+  // 出発地・到着地が泊まる宿か
+  stay?: { from: boolean; to: boolean }
   // 並べ替えのあいだ（「並べ替え」を押したあと）。区間と場所の補足を隠し、順番の上下のボタンとつまみだけを出す
   editing?: boolean
 }) {
   const legs = [...plan.stops.map((s) => s.leg), plan.back]
-  const walkM = useWalkMeters(legs)
+  const rails = legs.map((l, i) => legRailColor(l, buses?.[i]))
   // 行の右のつまみをなぞって並べ替える。なぞっている間は行を浮かせ、ほかの行をよけさせる。
   // 指が画面の上か下の端に近いときは、一覧を流す（広い画面では左の欄、狭い画面ではページ）
   const rows = useRef<(HTMLLIElement | null)[]>([])
@@ -215,26 +235,26 @@ export function RouteList({
   }
   return (
     <ol ref={list} className="route" aria-label={T.schedule} data-editing={editing ? '' : undefined}>
-      <li className="rt-node rt-end" data-out={legs[0].mode}>
+      <li className="rt-node rt-end" data-out={legs[0].mode} style={railVars(undefined, rails[0])}>
         <time className="rt-time num">{fmt(plan.leave)}</time>
         <span className="rt-rail">
           <span className="rt-terminal" />
         </span>
         <span className="rt-body">
           <span className="rt-name">{data.start.name}</span>
-          <span className="rt-meta">{T.depart}</span>
+          <span className="rt-meta">{stay?.from ? T.leaveStay : T.depart}</span>
         </span>
       </li>
       {plan.stops.map((s, i) => (
         <li key={s.spot.id} className="rt-group" ref={(el) => void (rows.current[i] = el)} style={shift(i)} data-lifted={drag?.from === i ? '' : undefined}>
           {editing ? (
-            <LegGap mode={s.leg.mode} />
+            <LegGap mode={s.leg.mode} color={rails[i]} />
           ) : (
-            <LegRow leg={s.leg} index={i} wait={s.wait} note={s.timeNote} bus={buses?.[i]} slope={slopes?.[i]} meters={walkM[i]} name={T.legOf(i === 0 ? data.start.name : plan.stops[i - 1].spot.name, s.spot.name)} onTransit={onTransit} onBus={onBus} onWalk={onWalk} />
+            <LegRow leg={s.leg} index={i} wait={s.wait} note={s.timeNote} bus={buses?.[i]} slope={slopes?.[i]} name={T.legOf(i === 0 ? data.start.name : plan.stops[i - 1].spot.name, s.spot.name)} onTransit={onTransit} onBus={onBus} onWalk={onWalk} />
           )}
           <div className="rt-stop-row" data-stop-id={s.spot.id}>
             {editing ? (
-              <div className="rt-node rt-stop" data-in={s.leg.mode} data-out={legs[i + 1].mode} data-changed={changed?.has(s.spot.id) ? '' : undefined}>
+              <div className="rt-node rt-stop" data-in={s.leg.mode} data-out={legs[i + 1].mode} data-changed={changed?.has(s.spot.id) ? '' : undefined} style={railVars(rails[i], rails[i + 1])}>
                 <time className="rt-time num">{fmt(s.arrive)}</time>
                 <span className="rt-rail">
                   <span className="badge num" aria-hidden="true">
@@ -252,6 +272,7 @@ export function RouteList({
                 data-in={s.leg.mode}
                 data-out={legs[i + 1].mode}
                 data-changed={changed?.has(s.spot.id) ? '' : undefined}
+                style={railVars(rails[i], rails[i + 1])}
                 onClick={() => onOpen(s.spot.id)}
               >
                 <time className="rt-time num">{fmt(s.arrive)}</time>
@@ -263,25 +284,10 @@ export function RouteList({
                 <span className="rt-body">
                   <span className="rt-name">{s.spot.name}</span>
                   <span className="rt-meta">
-                    <span className="rt-stay">
-                      {[roleText(s), fmtDur(s.stay), s.fits.length > 0 && T.fits]
-                        .filter((x): x is string => !!x)
-                        .map((x, k, all) => (
-                          <Fragment key={k}>
-                            <span className={k === 1 ? 'nw num' : 'nw'}>
-                              {x}
-                              {(k < all.length - 1 || s.finale) && SEP_END}
-                            </span>
-                            {(k < all.length - 1 || s.finale) && GAP}
-                          </Fragment>
-                        ))}
-                      {s.finale && (
-                        <span className="rt-fin">
-                          <span>{T.finale}</span>
-                          {T.finaleGap}
-                          <span>{T.finaleWhy(finaleWhy(s, date))}</span>
-                        </span>
-                      )}
+                    <span className="rt-stay nw">
+                      {roleText(s)}
+                      {T.sep}
+                      <span className="num">{fmtDur(s.stay)}</span>
                     </span>
                     {s.estimated && (
                       <span className="rt-crowd">
@@ -289,10 +295,9 @@ export function RouteList({
                       </span>
                     )}
                   </span>
-                  {auto?.has(s.spot.id) && <span className="rt-note">{T.auto}</span>}
                   <Cautions items={[s.closeOver && T.closes(fmt(s.spot.close)), needsReserve(s.spot) && T.reserve, afterSunset(s.spot, s.arrive, date) && T.sunset]} />
                 </span>
-                <Thumb spot={s.spot} photoOnly />
+                <Thumb spot={s.spot} photoOnly ask={!data.example} />
               </button>
             )}
             {editing && onMove && (
@@ -324,18 +329,18 @@ export function RouteList({
       ))}
       <li className="rt-group">
         {editing ? (
-          <LegGap mode={plan.back.mode} />
+          <LegGap mode={plan.back.mode} color={rails[plan.stops.length]} />
         ) : (
-          <LegRow leg={plan.back} index={plan.stops.length} wait={0} note={plan.backTimeNote} bus={buses?.[plan.stops.length]} slope={slopes?.[plan.stops.length]} meters={walkM[plan.stops.length]} name={T.legOf(plan.stops.length ? plan.stops[plan.stops.length - 1].spot.name : data.start.name, goalOf(data).name)} onTransit={onTransit} onBus={onBus} onWalk={onWalk} />
+          <LegRow leg={plan.back} index={plan.stops.length} wait={0} note={plan.backTimeNote} bus={buses?.[plan.stops.length]} slope={slopes?.[plan.stops.length]} name={T.legOf(plan.stops.length ? plan.stops[plan.stops.length - 1].spot.name : data.start.name, goalOf(data).name)} onTransit={onTransit} onBus={onBus} onWalk={onWalk} />
         )}
-        <div className="rt-node rt-end" data-in={plan.back.mode}>
+        <div className="rt-node rt-end" data-in={plan.back.mode} style={railVars(rails[plan.stops.length])}>
           <time className="rt-time num">{fmt(plan.finish)}</time>
           <span className="rt-rail">
             <span className="rt-terminal" />
           </span>
           <span className="rt-body">
             <span className="rt-name">{goalOf(data).name}</span>
-            <span className="rt-meta">{T.arrive}</span>
+            <span className="rt-meta">{stay?.to ? T.arriveStay : T.arrive}</span>
           </span>
         </div>
       </li>
@@ -344,9 +349,9 @@ export function RouteList({
 }
 
 // 並べ替えのあいだの区間。線だけを短く出す
-function LegGap({ mode }: { mode: Leg['mode'] }) {
+function LegGap({ mode, color }: { mode: Leg['mode']; color?: string }) {
   return (
-    <div className="rt-leg rt-leg-gap" data-mode={mode} aria-hidden="true">
+    <div className="rt-leg rt-leg-gap" data-mode={mode} aria-hidden="true" style={color ? ({ '--rail': color } as RailVars) : undefined}>
       <span className="rt-rail" />
     </div>
   )
@@ -371,9 +376,8 @@ function Cautions({ items }: { items: (string | false)[] }) {
 // 区間の行（と地図の所要時間の札）を押したときに、便の画面を開くか（選んだ便・見つけた便・電車の目安がある区間）。無ければ経路の画面
 export const legOpensBus = (leg: Leg, bus?: BusTrip) => !!(leg.real?.bus ?? (leg.real ? undefined : bus)) || (!leg.real && leg.mode === 'transit' && !!leg.rail)
 
-// 区間の行。場所の札と札の間に、手段と分を小さく出す（歩く区間は 1 行）。
-// 電車・バスの区間は行ぜんたいが 1 つのボタンで、便があれば便の画面、無ければ乗換を入れる画面を開く。
-// 乗る時刻・停留所は押した先（便の画面・経路の画面）に出す
+// 区間の行。場所の札と札の間に、手段と分を出す。徒歩の区間は坂があれば小さな高さの線と一言も（距離・乗る時刻は押した先）。
+// 行ぜんたいが 1 つのボタンで、電車・バスの区間は便があれば便の画面、無ければ乗換を入れる画面、歩く区間は手段の画面を開く
 function LegRow({
   leg,
   index,
@@ -381,7 +385,6 @@ function LegRow({
   note,
   bus,
   slope,
-  meters,
   name,
   onTransit,
   onBus,
@@ -393,57 +396,34 @@ function LegRow({
   note: TimeNote
   bus?: BusTrip
   slope?: Slope | null
-  meters?: number | null // 徒歩の区間の、道に沿った線の長さ（線が無ければ null）
   name: string // 読み上げに使う区間の名前（「京都駅から錦市場」）
   onTransit: (index: number) => void
   onBus?: (index: number) => void
   onWalk?: (index: number) => void
 }) {
-  const picked = leg.real?.bus
-  const trip = picked ?? (leg.real ? undefined : bus)
-  const rides = leg.real && !picked ? leg.real.steps.filter((x) => x.mode !== 'walk') : []
-  // 便も経路も無い区間の、電車の目安（時刻は無いので、乗る駅と降りる駅だけを出す）
-  const rail = !trip && !leg.real && leg.mode === 'transit' ? leg.rail : undefined
-  const hill = slopeLook(slope)
+  const { picked, trip, rides, rail, lines } = legLines(leg, bus)
   const kind = trip ? (isTrain(trip) ? 'train' : 'bus') : rail ? 'train' : rides.length && rides.every((x) => x.mode === rides[0].mode) && rides[0].mode !== 'other' ? rides[0].mode : 'both'
-  const about = !leg.real
-  const extra = wait > 0 ? [T.wait(wait)] : []
   const depart = picked ? picked.board.time : leg.real?.depart
-  const lines = trip
-    ? [{ name: busName(trip), color: busColor(trip) }]
-    : rail
-      ? [{ name: rail.line, color: railColor(rail) }]
-      : rides.map((x) => ({ name: x.line, color: stepColor(x, leg.real!) }))
-  // 1 行目の語（路線・分・ゆとりなど）。語の中では折り返さない
-  type Piece = { k: string; line?: { name: string; color: string | null }; text?: string }
-  const pieces: Piece[] = [
-    ...(lines.length ? [...lines.map((x, k) => ({ k: `l${k}`, line: x })), { k: 'min', text: T.mins(leg.minutes, about) }] : [{ k: 'mode', text: leg.label }]),
-    ...(leg.mode === 'walk' && meters != null ? [{ k: 'dist', text: distText(meters) }] : []),
-    ...extra.map((t) => ({ k: t, text: t })),
-  ]
   const toBus = legOpensBus(leg, bus) && !!onBus
+  const color = legRailColor(leg, bus)
+  const hill = leg.mode === 'walk' ? slopeLook(slope) : null
   const body = (
     <>
       <span className="rt-leg-head">
-        {pieces.map((p, i) => (
-          <span key={p.k}>
-            {i > 0 && GAP}
-            <span className={p.line ? 'rt-leg-line' : p.k === 'min' ? 'rt-leg-min num' : p.k === 'mode' ? 'rt-leg-mode num' : 'rt-leg-extra num'}>
-              {i === 0 && <ModeIcon mode={leg.mode === 'walk' ? 'walk' : kind === 'bus' ? 'bus' : 'train'} />}
-              {p.line ? (
-                <>
-                  {i > 0 && T.then}
-                  <LineMark color={p.line.color} />
-                  {p.line.name}
-                </>
-              ) : (
-                p.text
-              )}
-              {i < pieces.length - 1 && !(p.line && pieces[i + 1].line) && <span className="rt-leg-sep">{SEP_END}</span>}
-            </span>
-          </span>
-        ))}
-        {hill && ' '}
+        <ModeIcon mode={leg.mode === 'walk' ? 'walk' : leg.mode === 'car' ? 'car' : kind === 'bus' ? 'bus' : 'train'} />
+        {lines.length ? (
+          <>
+            {lines.map((x, k) => (
+              <Fragment key={k}>
+                {k > 0 && <span className="rt-leg-then">{T.then}</span>}
+                <LineChip name={x.name} color={x.color} />
+              </Fragment>
+            ))}
+            <span className="rt-leg-min num">{T.mins(leg.minutes, false)}</span>
+          </>
+        ) : (
+          <span className="rt-leg-mode num">{leg.label}</span>
+        )}
         {hill && (
           <span className="rt-slope" role="img" aria-label={hill.label} title={hill.detail}>
             <svg viewBox="0 0 36 12" width="36" height="12" aria-hidden="true">
@@ -452,35 +432,24 @@ function LegRow({
             {hill.word}
           </span>
         )}
+        {wait > 0 && <span className="rt-leg-extra num">{T.wait(wait)}</span>}
       </span>
       {note === 'missed' && depart && <span className="rt-warn num">{T.missed(depart)}</span>}
       {note === 'other' && depart && <span className="rt-warn num">{T.unused(depart)}</span>}
-      {leg.mode === 'transit' && (
-        <span className="rt-leg-see">
-          <span className="sr-only"> </span>
-          {rail ? T.seeRail : toBus ? T.seeTrips : T.seeRoute}
-          <Icon icon="chevronRight" color="inherit" size="xsm" />
-        </span>
-      )}
     </>
   )
+  const see = leg.mode === 'transit' ? (rail ? T.seeRail : toBus ? T.seeTrips : T.seeRoute) : T.seeMode
   return (
-    <div className="rt-leg" data-mode={leg.mode} data-real={leg.real ? '' : undefined}>
+    <div className="rt-leg" data-mode={leg.mode} data-real={leg.real ? '' : undefined} style={color ? ({ '--rail': color } as RailVars) : undefined}>
       <span className="rt-rail" />
-      {leg.mode === 'transit' ? (
-        <button type="button" className="rt-leg-text rt-leg-btn" onClick={() => (toBus ? onBus!(index) : onTransit(index))}>
+      {leg.mode === 'transit' || onWalk ? (
+        <button type="button" className="rt-leg-text rt-leg-btn" onClick={() => (leg.mode !== 'transit' ? onWalk!(index) : toBus ? onBus!(index) : onTransit(index))}>
           <span className="rt-leg-body">
             <span className="sr-only">{name} </span>
             {body}
+            <span className="sr-only"> {see}</span>
           </span>
-        </button>
-      ) : onWalk ? (
-        <button type="button" className="rt-leg-text rt-leg-btn" onClick={() => onWalk(index)}>
-          <span className="rt-leg-body">
-            <span className="sr-only">{name} </span>
-            {body}
-            <span className="sr-only"> {T.seeMode}</span>
-          </span>
+          {leg.mode === 'transit' && <Icon icon="chevronRight" color="inherit" size="xsm" />}
         </button>
       ) : (
         <span className="rt-leg-text">{body}</span>

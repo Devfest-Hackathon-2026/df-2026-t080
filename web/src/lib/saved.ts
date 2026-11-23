@@ -1,7 +1,8 @@
 // 作ったプランと手を入れた分（このブラウザに取っておく形）。再読み込みしても消えないように、言語ごとに 1 つ持つ
-import type { AreaData, Condition, GeoHit, TransitRoute } from '../types'
+import type { AreaData, Condition, GeoHit, Spot, TransitRoute, TripPoint } from '../types'
 import type { LegMode } from './geo'
 import type { BaseItem, Pace, Slot } from './planner'
+import type { TripWants } from './stayTalk'
 import { expireGoogleLocations } from './place'
 import { nameFound, stripFound } from './found'
 import { allLangs, byLang, isEn } from './i18n'
@@ -51,11 +52,69 @@ export type Saved = {
   example?: boolean
   // この旅を作り始めた時刻（行きたい場所を選ぶ画面を開いた時刻）。理由とミッションは、これより後の分を、この旅の物とみなす
   since?: number
+  // 本人がプランに手を入れた（例のプランは、手を入れたものだけを端末の棚とクラウドに残す）
+  edited?: boolean
+  // 何日かある旅の全日（今開いている日の位置は null、ほかは各日の Saved から days と day を除いた物）と、今開いている日（0 始まり）
+  days?: (Saved | null)[]
+  day?: number
+  // 予定している日数（作った日数より多いときだけ。まだ作っていない日も、日の切り替えに出す）
+  planDays?: number
+  // 泊ごとの宿（k 番目が k+1 泊目・入っていない泊は null で、前の泊と同じ。これから作る日の出発地・到着地に使う）と、
+  // 旅の最後に観光を終える場所（null なら 1日目の出発地）
+  stays?: (TripPoint | null)[]
+  tripEnd?: TripPoint | null
+  // 旅全体の希望と、日ごとの希望と時刻（泊まりの旅を 1 行の文から作ったときだけ。次の日を作るときに使う）
+  wants?: TripWants
+  // 泊まりの旅で、入りきらずにプランから外した見どころ（まだどの日にも入れていない場所。次の日の候補が出さないことがあるので場所ごと持つ）
+  carry?: Spot[]
+  // 車で回る旅（旅の全日で 1 つ。徒歩と車で回り、電車・バスは使わない）
+  car?: boolean
 }
 
+const isObj = (v: unknown): v is Record<string, unknown> => !!v && typeof v === 'object' && !Array.isArray(v)
+const isNum = (v: unknown): v is number => typeof v === 'number' && Number.isFinite(v)
+const isPoint = (v: unknown): v is TripPoint => isObj(v) && typeof v.text === 'string' && typeof v.name === 'string' && isNum(v.lat) && isNum(v.lng)
+const isDayWant = (v: unknown) => isObj(v) && (v.wish === undefined || typeof v.wish === 'string') && (v.start === undefined || isNum(v.start)) && (v.end === undefined || isNum(v.end))
+const isSpot = (v: unknown) => isObj(v) && typeof v.id === 'string' && typeof v.name === 'string' && isNum(v.lat) && isNum(v.lng) && typeof v.kind === 'string' && Array.isArray(v.crowd)
+const isBody = (v: unknown): v is Saved => isObj(v) && isObj(v.data) && Array.isArray(v.data.places)
+
+// 旅の全日の分（days・day・planDays・stays・tripEnd・wants・carry・car）のうち、形の壊れた物を外す（無い物として扱う）
+function dropBroken(v: Record<string, unknown>) {
+  if (v.stays !== undefined && !(Array.isArray(v.stays) && v.stays.every((x) => x === null || isPoint(x)))) delete v.stays
+  if (v.tripEnd !== undefined && v.tripEnd !== null && !isPoint(v.tripEnd)) delete v.tripEnd
+  const w = v.wants
+  if (w !== undefined && !(isObj(w) && typeof w.wish === 'string' && Array.isArray(w.days) && w.days.every(isDayWant))) delete v.wants
+  if (v.planDays !== undefined && !isNum(v.planDays)) delete v.planDays
+  if (v.carry !== undefined && !(Array.isArray(v.carry) && v.carry.every(isSpot))) delete v.carry
+  if (v.car !== undefined && typeof v.car !== 'boolean') delete v.car
+  if (v.days !== undefined && !(Array.isArray(v.days) && v.days.every((d) => d === null || isBody(d)))) {
+    delete v.days
+    delete v.day
+  }
+  if (v.day !== undefined && !isNum(v.day)) delete v.day
+}
+
+// 取っておいた形か（旅の全日の分で形の壊れた物は、ここで外す）
 export const isSaved = (s: unknown): s is Saved => {
-  const v = s as Saved | null
-  return !!v && typeof v === 'object' && !!v.data && Array.isArray(v.data.places)
+  if (!isBody(s)) return false
+  dropBroken(s as unknown as Record<string, unknown>)
+  return true
+}
+
+// 本体とほかの日の場所の一覧（何日かある旅は、全日の分）
+export const placeLists = (s: Saved) => [s.data.places, ...(s.days ?? []).flatMap((d) => (d?.data?.places ? [d.data.places] : [])), ...(s.carry?.length ? [s.carry] : [])]
+
+// 取っておく形にする（全日の、検索から追加した場所の名前と営業時間を外す）
+export function stripSaved(s: Saved): Saved {
+  const strip = (d: Saved): Saved => {
+    const places = stripFound(d.data.places)
+    return places === d.data.places ? d : { ...d, data: { ...d.data, places } }
+  }
+  const stripped = strip(s)
+  const carry = s.carry?.length ? stripFound(s.carry) : s.carry
+  const body = carry === s.carry ? stripped : { ...stripped, carry }
+  if (!s.days?.length) return body
+  return { ...body, days: s.days.map((d) => (d ? strip(d) : null)) }
 }
 
 export function readSaved(): Saved | null {
@@ -65,8 +124,10 @@ export function readSaved(): Saved | null {
     if (!raw) return null
     const s = JSON.parse(raw) as unknown
     if (!isSaved(s)) return null
-    expireGoogleLocations(s.data.places)
-    nameFound(s.data.places)
+    for (const list of placeLists(s)) {
+      expireGoogleLocations(list)
+      nameFound(list)
+    }
     return s
   } catch {
     return null
@@ -80,7 +141,7 @@ export function expireSavedLocations(now = Date.now()) {
     try {
       const raw = window.localStorage.getItem(key)
       const s = raw ? (JSON.parse(raw) as unknown) : null
-      if (isSaved(s) && expireGoogleLocations(s.data.places, now) > 0) window.localStorage.setItem(key, JSON.stringify(s))
+      if (isSaved(s) && placeLists(s).reduce((n, list) => n + expireGoogleLocations(list, now), 0) > 0) window.localStorage.setItem(key, JSON.stringify(s))
     } catch {
       /* 読めない・書けない置き場は、そのまま */
     }
@@ -102,8 +163,7 @@ export function writeSaved(s: Saved): boolean {
       storedSince = cur && !cur.example ? (cur.since ?? 0) : null
     }
     if (beforeReplace && storedSince !== null && storedSince !== (s.since ?? 0)) beforeReplace(s)
-    const places = stripFound(s.data.places)
-    window.localStorage.setItem(STORE, JSON.stringify(places === s.data.places ? s : { ...s, data: { ...s.data, places } }))
+    window.localStorage.setItem(STORE, JSON.stringify(stripSaved(s)))
     storedSince = s.example ? null : (s.since ?? 0)
     return true
   } catch {

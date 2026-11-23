@@ -7,7 +7,7 @@ import { GoogleMark } from './GoogleMark'
 
 const T = tr({
   ja: {
-    text: 'この旅は、この端末にだけ保存されています。ログインすると、残せます。',
+    text: 'この旅は、このデバイスにのみ保存されています。ログインすると、アカウントに保存されます。',
     signIn: 'Google でログイン',
     close: '閉じる',
   },

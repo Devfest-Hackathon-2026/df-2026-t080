@@ -5,7 +5,7 @@ import { useBackClose } from '../lib/backStack'
 import { tr } from '../lib/i18n'
 
 const T = tr({
-  ja: { share: '共有', text: 'テキストで共有', image: '画像で保存' },
+  ja: { share: '共有', text: 'テキストを共有', image: '画像として保存' },
   en: { share: 'Share', text: 'Share as Text', image: 'Save as Image' },
 })
 
@@ -20,7 +20,7 @@ function ShareShape(props: SVGProps<SVGSVGElement>) {
   )
 }
 
-// 見出しの「共有」（送る形のアイコン）。押すと、プランを文で共有するか、画像で保存するかを選ぶ小さなメニューを開く（「戻る」でも閉じる）
+// 見出しの「共有」（送る形のアイコン）。押すと、プランを文で共有するか、画像として保存するかを選ぶ小さなメニューを開く（「戻る」でも閉じる）
 export function ShareMenu({ disabled, onText, onImage }: { disabled: boolean; onText: () => void; onImage: () => void }) {
   const [open, setOpen] = useState(false)
   const box = useRef<HTMLDivElement>(null)

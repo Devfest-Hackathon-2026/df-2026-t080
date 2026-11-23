@@ -2,7 +2,7 @@ import { creditItems, fetchedText, odptCredit, type BusSource } from '../lib/bus
 import { tr } from '../lib/i18n'
 
 const T = tr({
-  ja: { sep: '・', via: (v: string) => `（${v}）`, edited: '時刻表は便を探すために加工しています', at: (t: string) => `（${t}に取得）`, end: '。' },
+  ja: { sep: '・', via: (v: string) => `（${v}）`, edited: '時刻表は便の検索のために加工しています', at: (t: string) => `（${t}に取得）`, end: '。' },
   en: { sep: ' · ', via: (v: string) => ` (${v})`, edited: 'Timetables are processed to find departures', at: (t: string) => `\u00a0(retrieved ${t})`, end: '.' },
 })
 

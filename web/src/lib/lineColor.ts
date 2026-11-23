@@ -45,16 +45,20 @@ export function stepColor(s: TransitStep, r: TransitRoute): string | null {
   return s.line.trim() ? nameColor(s.line) : null
 }
 
-// 路線の色で塗った札の文字の色。時刻表の文字の色が地の色と 4.5:1 以上の差があればそれを、無いか足りなければ白と黒のうち差の大きい方
+// 路線の色で塗った札の文字の色（札の字は太字）。
+// 1. 時刻表が黒のほかの文字の色を決めていて、地の色と 3:1 以上の差があればその色（黒は時刻表の既定の値なので、決めた色とは見ない）
+// 2. 白と 3:1 以上の差がある地の色（赤・青・緑など）は白。計算の差は黒の方が大きくても、濃い色の上の太字は白の方が読みやすい
+// 3. 白との差が足りない明るい地の色（橙・黄など）は黒
 export function inkOn(bg: string, text?: string | null): string {
-  if (!/^#[0-9a-f]{6}$/i.test(bg)) return gtfsColor(text) ?? '#ffffff'
+  const t = gtfsColor(text)?.toLowerCase() ?? null
+  if (!HEX.test(bg)) return t ?? '#ffffff'
   const l = luminance(bg)
   const ratio = (x: number) => (Math.max(l, x) + 0.05) / (Math.min(l, x) + 0.05)
-  const t = gtfsColor(text)
-  if (t && /^#[0-9a-f]{6}$/i.test(t) && ratio(luminance(t)) >= 4.5) return t
-  return ratio(1) >= ratio(0) ? '#ffffff' : '#000000'
+  if (t && t !== '#000000' && ratio(luminance(t)) >= 3) return t
+  return ratio(1) >= 3 ? '#ffffff' : '#000000'
 }
 
+const HEX = /^#[0-9a-f]{6}$/i
 const rgb = (hex: string) => [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16))
 const toHex = (c: number[]) => `#${c.map((v) => Math.round(v).toString(16).padStart(2, '0')).join('')}`
 const luminance = (hex: string) => {
@@ -75,4 +79,35 @@ export function lineEdge(color: string, dark: boolean, land: string): string {
   const g = /^#[0-9a-f]{6}$/i.test(land) ? luminance(land) : 0.01
   const ratio = (Math.max(l, g) + 0.05) / (Math.min(l, g) + 0.05)
   return ratio < 5 ? toHex(rgb(color).map((v) => v + (255 - v) * 0.5)) : land
+}
+
+// 乗る区間の縁取りを、ふだんより何 px 太くするか。
+// 明るい画面で、線の色と地の色の差が 3:1 に届かない色（京都市バスの橙・黄など）は、線の色を変えずに濃い縁取りを左右 1px ずつ太くして、縁取りで地図から浮かせる
+// 地の色は、地図の下地から取った rgb()・hsl() の書き方でもよい
+export function lineEdgeGrow(color: string, dark: boolean, land: string): number {
+  const ground = cssHex(land)
+  if (dark || !/^#[0-9a-f]{6}$/i.test(color) || !ground) return 0
+  const l = luminance(color)
+  const g = luminance(ground)
+  return (Math.max(l, g) + 0.05) / (Math.min(l, g) + 0.05) < 3 ? 2 : 0
+}
+
+// #rgb・#rrggbb・rgb()・rgba()・hsl()・hsla() を #rrggbb に（読めなければ null）
+function cssHex(c: string): string | null {
+  const t = c.trim().toLowerCase()
+  if (/^#[0-9a-f]{6}$/.test(t)) return t
+  if (/^#[0-9a-f]{3}$/.test(t)) return `#${[...t.slice(1)].map((x) => x + x).join('')}`
+  const n = t.match(/-?[\d.]+/g)?.map(Number)
+  if (!n || n.length < 3) return null
+  if (t.startsWith('rgb')) return toHex(n.slice(0, 3))
+  if (t.startsWith('hsl')) {
+    const [h, sat, li] = [n[0], n[1] / 100, n[2] / 100]
+    const a = sat * Math.min(li, 1 - li)
+    const f = (k: number) => {
+      const x = (k + h / 30) % 12
+      return (li - a * Math.max(-1, Math.min(x - 3, 9 - x, 1))) * 255
+    }
+    return toHex([f(0), f(8), f(4)])
+  }
+  return null
 }

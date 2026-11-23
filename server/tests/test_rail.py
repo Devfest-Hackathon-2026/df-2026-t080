@@ -256,16 +256,18 @@ class MergeTest(unittest.TestCase):
 class FakeOverpass:
     def __init__(self, result=None, error=None, block=False):
         self.result, self.error = result if result is not None else answer(), error
-        self.calls = []
+        self.calls, self.urls = [], []
         self.gate = threading.Event()
         if not block:
             self.gate.set()
 
-    def __call__(self, box):
+    def __call__(self, box, url=None):
         self.calls.append(box)
+        self.urls.append(url)
         self.gate.wait(5)
-        if self.error:
-            raise self.error
+        error = self.error(url) if callable(self.error) and not isinstance(self.error, BaseException) else self.error
+        if error:
+            raise error
         return self.result
 
 
@@ -289,8 +291,8 @@ class StoreTest(unittest.TestCase):
     def tearDown(self):
         self.tmp.cleanup()
 
-    def store(self, fetch):
-        return rail.Store(self.dir, fetch=fetch, now=lambda: self.clock[0], sleep=self.slept.append, on=lambda: True)
+    def store(self, fetch, urls=('https://a.example/api',), **kw):
+        return rail.Store(self.dir, fetch=fetch, now=lambda: self.clock[0], sleep=self.slept.append, on=lambda: True, urls=urls, **kw)
 
     def ready(self, st, pts):
         return wait_until(lambda: (lambda r: r if r[1] != 'pending' else None)(st.get(pts)))
@@ -402,6 +404,52 @@ class StoreTest(unittest.TestCase):
         finally:
             rail.PER_DAY = saved
 
+    def test_busy_server_hands_over_to_the_next(self):
+        urls = ('https://a.example/api', 'https://b.example/api', 'https://c.example/api')
+        fake = FakeOverpass(error=lambda url: rail.Busy('HTTP 502') if url == urls[0] else None)
+        st = self.store(fake, urls=urls)
+        pts = [pt(0), pt(2)]
+        st.get(pts)
+        net, state = self.ready(st, pts)
+        self.assertEqual((state, len(net.lines)), ('ready', 2))
+        self.assertEqual(fake.urls, list(urls[:2]))
+        self.assertEqual(self.slept, [rail.GAP])
+
+    def test_all_servers_failing_counts_as_one_failure(self):
+        urls = ('https://a.example/api', 'https://b.example/api', 'https://c.example/api')
+        fake = FakeOverpass(error=lambda url: rail.Busy('timeout') if url != urls[2] else ValueError('runtime error'))
+        st = self.store(fake, urls=urls)
+        pts = [pt(0), pt(2)]
+        st.get(pts)
+        self.assertEqual(self.ready(st, pts), (None, 'none'))
+        self.assertEqual(fake.urls, list(urls))
+        self.assertEqual(len(st.asked), 3)
+        self.assertEqual(self.slept, [rail.GAP, rail.GAP])
+        self.clock[0] += rail.RETRY_AFTER - 10
+        self.assertEqual(st.get(pts), (None, 'none'))
+        self.assertEqual(len(fake.calls), 3)
+
+    def test_daily_limit_covers_all_servers(self):
+        urls = ('https://a.example/api', 'https://b.example/api')
+        fake = FakeOverpass(error=rail.Busy('HTTP 504'))
+        st = self.store(fake, urls=urls)
+        saved = rail.PER_DAY
+        rail.PER_DAY = 1
+        try:
+            pts = [pt(0), pt(2)]
+            st.get(pts)
+            self.assertEqual(self.ready(st, pts), (None, 'none'))
+            self.assertEqual(fake.urls, [urls[0]])
+        finally:
+            rail.PER_DAY = saved
+
+    def test_server_list_from_the_setting(self):
+        self.assertEqual(rail.urls_of(''), rail.DEFAULT_URLS)
+        self.assertEqual(rail.urls_of(None), rail.DEFAULT_URLS)
+        self.assertEqual(rail.urls_of(' https://x.example/api , ,https://y.example/api '), ('https://x.example/api', 'https://y.example/api'))
+        self.assertEqual(rail.DEFAULT_URLS[0], 'https://overpass-api.de/api/interpreter')
+        self.assertEqual(len(rail.DEFAULT_URLS), 3)
+
     def test_off(self):
         st = rail.Store(self.dir, fetch=FakeOverpass(), on=lambda: False)
         self.assertEqual(st.get([pt(0), pt(2)]), (None, 'off'))
@@ -413,6 +461,100 @@ class StoreTest(unittest.TestCase):
         self.assertFalse(rail.enabled())
 
 
+class SeedTest(unittest.TestCase):
+    """同梱の種（rail_seed/）。メモリにもディスクにも無いときに古い物として使い、裏で取り直す"""
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.dir = os.path.join(self.tmp.name, 'cache')
+        self.seeds = os.path.join(self.tmp.name, 'seed')
+        os.makedirs(self.seeds)
+        self.clock = [1_000_000.0]
+        self.fakes, self.stores = [], []
+        self.box = rail.key_box([pt(0), pt(2)])
+        with open(os.path.join(self.seeds, rail.box_name(self.box)), 'w', encoding='utf-8') as f:
+            json.dump({'format': rail.FORMAT, 'fetched': 500.0, 'box': list(self.box), **rail.compact(answer())}, f)
+
+    def tearDown(self):
+        for f in self.fakes:
+            f.gate.set()
+        for st in self.stores:
+            wait_until(lambda: not st.busy)
+        self.tmp.cleanup()
+
+    def store(self, fetch):
+        self.fakes.append(fetch)
+        st = rail.Store(self.dir, fetch=fetch, now=lambda: self.clock[0], sleep=lambda s: None, on=lambda: True,
+                        urls=('https://a.example/api',), seed_dir=self.seeds)
+        self.stores.append(st)
+        return st
+
+    def test_seed_is_used_at_once_and_asked_again(self):
+        fake = FakeOverpass(block=True)
+        st = self.store(fake)
+        net, state = st.get([pt(0), pt(2)])
+        self.assertEqual((state, net.seed, net.fetched, len(net.lines)), ('ready', True, 500.0, 2))
+        self.assertTrue(wait_until(lambda: fake.calls))
+        self.assertEqual(fake.calls, [self.box])
+        fake.gate.set()
+        newer = wait_until(lambda: (lambda n: n if not n.seed else None)(st.get([pt(0), pt(2)])[0]))
+        self.assertEqual((newer.seed, newer.fetched), (False, self.clock[0]))
+        self.assertIn(rail.box_name(self.box), os.listdir(self.dir))
+        st.get([pt(0), pt(2)])
+        self.assertEqual(len(fake.calls), 1)
+
+    def test_seed_stays_when_the_servers_fail(self):
+        fake = FakeOverpass(error=rail.Busy('HTTP 504'))
+        st = self.store(fake)
+        net, state = st.get([pt(0), pt(2)])
+        self.assertEqual((state, net.seed), ('ready', True))
+        wait_until(lambda: self.box in st.failed and not st.busy)
+        net, state = st.get([pt(0), pt(2)])
+        self.assertEqual((state, net.seed), ('ready', True))
+        self.assertEqual(len(fake.calls), 1)
+
+    def test_narrow_area_inside_the_seed_uses_it(self):
+        st = self.store(FakeOverpass(block=True))
+        net, state = st.get_box((self.box[0] + 0.1, self.box[1] + 0.1, self.box[2], self.box[3]))
+        self.assertEqual((state, net.seed), ('ready', True))
+
+    def test_saved_data_wins_over_the_seed(self):
+        fake = FakeOverpass(result={'elements': []})
+        st = self.store(fake)
+        st.get([pt(0), pt(2)])
+        wait_until(lambda: not st.get([pt(0), pt(2)])[0].seed)
+        again = self.store(FakeOverpass(block=True))
+        net, state = again.get([pt(0), pt(2)])
+        self.assertEqual((state, net.seed, net.lines), ('ready', False, []))
+
+    def test_no_seed_folder(self):
+        fake = FakeOverpass(block=True)
+        self.fakes.append(fake)
+        st = rail.Store(self.dir, fetch=fake, now=lambda: self.clock[0], on=lambda: True, urls=('https://a.example/api',))
+        self.stores.append(st)
+        self.assertEqual(st.get([pt(0), pt(2)]), (None, 'pending'))
+
+
+class BundledSeedTest(unittest.TestCase):
+    """同梱した大阪の種で、梅田からなんばが御堂筋線（路線の色つき）になる"""
+
+    def test_osaka(self):
+        box = (34.6, 135.4, 34.8, 135.6)
+        path = os.path.join(rail.SEED_DIR, rail.box_name(box))
+        with open(path, encoding='utf-8') as f:
+            d = json.load(f)
+        self.assertEqual((d['format'], d['box']), (rail.FORMAT, list(box)))
+        pts = [(34.7025, 135.4959), (34.6661, 135.5001), (34.6873, 135.5262)]
+        self.assertEqual(rail.key_box(pts), box)
+        net = rail.Network(rail.lines_of(d), d['fetched'], True)
+        best = net.best(pts)
+        o = net.opt(best[0][1])
+        self.assertIn('御堂筋線', o['line'])
+        self.assertEqual(o['color'], 'E5171F')
+        self.assertGreater(len(o['path']), 2)
+        self.assertIsNotNone(best[0][2])
+
+
 class CompactTest(unittest.TestCase):
     def test_keeps_only_what_is_used(self):
         raw = rail.compact(answer())
@@ -420,6 +562,24 @@ class CompactTest(unittest.TestCase):
         self.assertEqual(r['members'][0], [1, 'stop'])
         self.assertNotIn('type', r['tags'])
         self.assertEqual(raw['nodes']['1'], [LAT, 135.5, 'A駅', 'A St'])
+
+    def test_converted_relations_give_the_same_result(self):
+        def converted(el):
+            if el['type'] != 'relation':
+                return el
+            ms = el['members'] + [{'type': 'way', 'ref': 9, 'role': ''}]
+            m = ';'.join(f"{x['ref']} {x['role']}" if x['type'] == 'node' else '' for x in ms)
+            return {'type': 'rel', 'id': el['id'], 'tags': {**el['tags'], rail.MEMBERS: m}}
+        given = answer()
+        self.assertEqual(rail.compact({'elements': [converted(e) for e in given['elements']]}), rail.compact(given))
+
+    def test_query_asks_only_node_members(self):
+        q = rail.QUERY.format(s='34.98', w='135.75', n='35.00', e='35.77')
+        self.assertIn('convert rel ::id=id(),::=::,"zt:m"=per_member(mtype()=="node"?ref()+" "+role():"")', q)
+        self.assertNotIn('out body', q)
+        self.assertEqual(rail.node_members('1 stop;;;2 platform_entry_only;; x;3 '), [
+            {'type': 'node', 'ref': 1, 'role': 'stop'}, {'type': 'node', 'ref': 2, 'role': 'platform_entry_only'},
+            {'type': 'node', 'ref': 3, 'role': ''}])
 
 
 # ---- /api/bus-table・/api/bus-info ----
@@ -501,15 +661,41 @@ class AppTest(unittest.TestCase):
     def table(self, **extra):
         return call(self.port, 'POST', '/api/bus-table', {'points': self.pts, 'date': '2026-11-08', 'start': 540, 'end': 1080, **extra})
 
-    def test_timetable_area_does_not_use_rail(self):
+    def test_timetable_area_also_uses_rail(self):
         app.BUS = FakeBus(idxs=[FakeIdx()])
         app.RAIL = FakeRail(network())
         bus.door_table = lambda *a, **k: [[None, 11, None], [None, None, None], [None, None, None]]
         code, d = self.table()
         self.assertEqual(code, 200)
-        self.assertEqual(d['minutes'], [[None, 11, None], [None, None, None], [None, None, None]])
-        self.assertNotIn('rail', d)
-        self.assertEqual(app.RAIL.asked, [])
+        self.assertEqual(d['minutes'][0][1], 11)
+        self.assertEqual(d['rail']['via'][0][1], None)
+        o = d['rail']['opts'][d['rail']['via'][0][2]]
+        self.assertEqual(d['minutes'][0][2], o['walkTo'] + o['wait'] + o['ride'] + o['walkFrom'])
+        self.assertEqual((o['line'], o['color']), ('テスト地下鉄線', 'E5171F'))
+        self.assertNotIn('railLoading', d)
+        self.assertEqual(len(app.RAIL.asked), 1)
+
+    def test_timetable_is_not_held_back_by_rail(self):
+        app.BUS = FakeBus(idxs=[FakeIdx()])
+        app.RAIL = FakeRail(None, 'pending')
+        bus.door_table = lambda *a, **k: [[None, 11, None], [None, None, None], [None, None, None]]
+        d = self.table()[1]
+        self.assertEqual((d['minutes'][0][1], d['minutes'][0][2], d.get('railLoading'), 'rail' in d), (11, None, True, False))
+        app.RAIL.net, app.RAIL.state = network(), 'ready'
+        d = self.table()[1]
+        self.assertEqual((d['minutes'][0][1], 'railLoading' in d), (11, False))
+        self.assertIsNotNone(d['minutes'][0][2])
+        self.assertIsNotNone(d['rail']['via'][0][2])
+
+    def test_timetable_stays_when_rail_is_missing(self):
+        app.BUS = FakeBus(idxs=[FakeIdx()])
+        bus.door_table = lambda *a, **k: [[None, 11, None], [None, None, None], [None, None, None]]
+        for net, state in ((None, 'none'), (None, 'off'), (rail.Network([], 1.0), 'ready')):
+            app.RAIL = FakeRail(net, state)
+            d = self.table()[1]
+            self.assertEqual(d['minutes'], [[None, 11, None], [None, None, None], [None, None, None]])
+            self.assertNotIn('rail', d)
+            self.assertNotIn('railLoading', d)
 
     def test_rail_names_follow_the_language(self):
         app.BUS = FakeBus()
@@ -548,7 +734,7 @@ class AppTest(unittest.TestCase):
         app.BUS = FakeBus(idxs=[FakeIdx()])
         bus.door_table = lambda *a, **k: [[None, 4, None], [None, None, None], [None, None, None]]
         d = self.table()[1]
-        self.assertEqual((d['minutes'][0][1], 'railLoading' in d, 'rail' in d), (4, False, False))
+        self.assertEqual((d['minutes'][0][1], d.get('railLoading'), 'rail' in d), (4, True, False))
         app.BUS = FakeBus(pending=True)
         app.RAIL = FakeRail(network())
         self.assertEqual(self.table()[1], {'loading': True})
@@ -568,6 +754,10 @@ class AppTest(unittest.TestCase):
         _, d = call(self.port, 'GET', f'/api/bus-info?date=2026-11-08&box={LAT},135.50,{LAT + 0.002},135.533')
         self.assertEqual((d['on'], d['rail'], d['railLoading']), (False, False, True))
         self.assertEqual(app.RAIL.asked, [rail.key_box([(LAT, 135.50), (LAT + 0.002, 135.533)])])
+        app.BUS = FakeBus(idxs=[FakeIdx()])
+        app.RAIL = FakeRail(network())
+        _, d = call(self.port, 'GET', f'/api/bus-info?date=2026-11-08&box={LAT},135.50,{LAT + 0.002},135.533')
+        self.assertEqual((d['on'], d['rail'], d['railLoading']), (True, True, False))
 
 
 if __name__ == '__main__':

@@ -97,8 +97,8 @@ export function MapFloat({ target, on, onOpen }: { target: HTMLElement | null; o
 }
 
 const L = tr({
-  ja: { title: '凡例', order: '回る順', start: '出発地', walk: '徒歩', ride: '電車・バス（路線の色）', stn: '乗る・降りる所', cand: 'ほかの候補' },
-  en: { title: 'Legend', order: 'Stop order', start: 'Start', walk: 'Walk', ride: 'Train or bus (line color)', stn: 'Get on / off', cand: 'Other options' },
+  ja: { title: '凡例', order: '回る順', start: '出発地', walk: '徒歩', ride: '電車・バス（路線の色）', car: '車', stn: '乗車・下車する場所', cand: 'ほかの候補' },
+  en: { title: 'Legend', order: 'Stop order', start: 'Start', walk: 'Walk', ride: 'Train or bus (line color)', car: 'Car', stn: 'Get on / off', cand: 'Other options' },
 })
 const LEGEND_KEY = 'intentrip:map-legend'
 const readLegend = () => {
@@ -111,8 +111,8 @@ const readLegend = () => {
   return window.matchMedia('(min-width: 960px)').matches
 }
 
-// 左下の凡例。cands: 地図に候補の印を出しているか
-export function MapLegend({ cands }: { cands: boolean }) {
+// 左下の凡例。cands: 地図に候補の印を出しているか、car: 車で回る旅か（電車・バスと乗り降りする所の代わりに車を出す）
+export function MapLegend({ cands, car = false }: { cands: boolean; car?: boolean }) {
   const [open, setOpen] = useState(readLegend)
   // 開け閉めしたら、地図に描き直してもらう（手で動かしていなければ、凡例に隠れないように映し直す）
   const toggle = () => {
@@ -147,15 +147,25 @@ export function MapLegend({ cands }: { cands: boolean }) {
             {L.walk}
           </li>
           <li>
-            <svg className="lg-ride" viewBox="0 0 22 8" aria-hidden="true">
-              <path d="M2 4h18" />
+            {/* 車は浅葱の 1 本、電車とバスは路線ごとの色（2 色を並べて、色が路線で変わることを見せる） */}
+            <svg className={car ? 'lg-ride' : 'lg-ride lg-lines'} viewBox="0 0 22 8" aria-hidden="true">
+              {car ? (
+                <path d="M2 4h18" />
+              ) : (
+                <>
+                  <path d="M2 4h8" />
+                  <path d="M12 4h8" />
+                </>
+              )}
             </svg>
-            {L.ride}
+            {car ? L.car : L.ride}
           </li>
-          <li>
-            <span className="lg-stn" aria-hidden="true" />
-            {L.stn}
-          </li>
+          {!car && (
+            <li>
+              <span className="lg-stn" aria-hidden="true" />
+              {L.stn}
+            </li>
+          )}
           {cands && (
             <li>
               <svg className="lg-cand" viewBox="0 0 24 24" aria-hidden="true">

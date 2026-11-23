@@ -15,7 +15,7 @@ import type { Leg } from './geo'
 import type { BusTrip } from '../types'
 import type { Mode } from './modeShape'
 import { FOUND_NAME, isFound, roleText } from './found'
-import { licenseLabel, thumbUrl, wikiPhoto } from './photo'
+import { licenseLabel, sourceLabel, thumbUrl, wikiPhoto } from './photo'
 import { LEVEL_LABEL } from './crowd'
 import { BEAK, BELLY, BODY, EYE, FEET, FEET_W, FLIPPER, FLIPPER_W, GAP as FLOCK_GAP, H as FLOCK_H, LAYOUT, LEFT, RIGHT } from './penguinShape'
 import { fmt, fmtDur } from './time'
@@ -81,12 +81,15 @@ export const RECAP_WORDS = tr({
     depart: '出発',
     arrive: '到着',
     walk: '徒歩',
+    car: '車',
     bus: 'バス',
     train: '電車',
     transit: '電車・バス',
     mins: (m: number) => `${m}分`,
     credit: (author: string, license: string) => `${author}・${license}`,
     photos: '写真 Wikimedia Commons（トリミングあり）：',
+    photosAny: '写真（トリミングあり）：',
+    from: (credit: string, src: string) => `${credit}・${src}`,
     listSep: '、',
   },
   en: {
@@ -106,12 +109,15 @@ export const RECAP_WORDS = tr({
     depart: 'Depart',
     arrive: 'Arrive',
     walk: 'Walk',
+    car: 'Drive',
     bus: 'Bus',
     train: 'Train',
     transit: 'Transit',
     mins: (m: number) => `${m} min`,
     credit: (author: string, license: string) => `${author}, ${license}`,
     photos: 'Photos from Wikimedia Commons (cropped): ',
+    photosAny: 'Photos (cropped): ',
+    from: (credit: string, src: string) => `${credit}, ${src}`,
     listSep: '; ',
   },
 })
@@ -135,7 +141,7 @@ export type RecapStop = {
   hit?: 'yes' | 'no'
   odai?: string // ミッションの文（写真を撮ったものだけ）
   shot?: string // ミッションの写真（data URL）
-  wiki?: { url: string; credit: string } // 作者とライセンスの分かる Wikimedia の写真
+  wiki?: { url: string; credit: string; flickr?: boolean } // 作者とライセンスの分かる写真（Wikimedia Commons。flickr: Flickr の写真）
 }
 // 混雑の 1 行: よくある回り方と、このプランの、混雑と推定される時間の滞在（分）。どちらも当たらなければ 'never'。出さないときは null
 export type RecapCrowd = { usual: number; plan: number } | 'never' | null
@@ -163,6 +169,7 @@ function moveOf(leg: Leg, found: BusTrip | undefined): Move {
   const bus: Move = { icon: 'bus', word: R.bus, min }
   const train: Move = { icon: 'train', word: R.train, min }
   if (leg.mode === 'walk') return { icon: 'walk', word: R.walk, min }
+  if (leg.mode === 'car') return { icon: 'car', word: R.car, min }
   const trip = leg.real ? leg.real.bus : found
   if (trip) return trip.mode === 'train' ? train : bus
   const rides = (leg.real?.steps ?? []).filter((s) => s.mode === 'train' || s.mode === 'bus')
@@ -206,7 +213,7 @@ export function recapInput(o: { area: string; date: string; title: string[]; sta
       hit: why?.hit,
       odai: shot?.text,
       shot: shot?.photo,
-      wiki: wp ? { url: wp.url, credit } : undefined,
+      wiki: wp ? { url: wp.url, credit, ...(sourceLabel(wp.source) === 'Flickr' && { flickr: true }) } : undefined,
     }
   })
   return { area: o.area, date: o.date, title: o.title, start: o.start, goal: o.goal, leave: o.plan.leave, finish: o.plan.finish, stops, back: moveOf(o.plan.back, o.buses[o.plan.stops.length]), crowd: crowdLine(o.plan, o.usual) }
@@ -639,7 +646,9 @@ function layout(c: Ctx, input: RecapInput, pics: Map<number, Pic>, p: Pattern, z
 const drawsPhoto = (b: Block) => !!b.pic && (!!b.big || b.thumb > 0)
 const creditMemo = new Map<string, string[]>()
 function creditLines(c: Ctx, blocks: Block[]): string[] {
-  const items = blocks.filter((b) => b.pic?.wiki && b.st.wiki && drawsPhoto(b)).map((b) => `${b.st.no} ${b.st.wiki!.credit}`)
+  const shown = blocks.filter((b) => b.pic?.wiki && b.st.wiki && drawsPhoto(b))
+  const mixed = shown.some((b) => b.st.wiki!.flickr)
+  const items = shown.map((b) => `${b.st.no} ${mixed ? R.from(b.st.wiki!.credit, b.st.wiki!.flickr ? 'Flickr' : 'Wikimedia Commons') : b.st.wiki!.credit}`)
   if (!items.length) return []
   const key = items.join('\n')
   const memo = creditMemo.get(key)
@@ -648,7 +657,7 @@ function creditLines(c: Ctx, blocks: Block[]): string[] {
   const width = W - 128
   const sep = R.listSep.trimEnd()
   const lines: string[] = []
-  let cur = R.photos
+  let cur = mixed ? R.photosAny : R.photos
   items.forEach((it, i) => {
     const piece = (i ? R.listSep : '') + it
     if (c.measureText(cur + piece).width <= width) {

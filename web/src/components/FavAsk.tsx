@@ -11,7 +11,7 @@ import { StopWhy } from './StopWhy'
 const T = tr({
   ja: {
     title: '一番楽しみな場所は？',
-    lead: '選んだ場所と理由は、旅のあとの振り返りで見返せます。',
+    lead: '選んだ場所と理由は、旅のあとの振り返りで確認できます。',
     close: '閉じる',
     done: '完了',
   },

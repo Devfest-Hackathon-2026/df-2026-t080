@@ -14,8 +14,8 @@ const T = tr({
     via: '（Google マップ）',
     locale: 'ja-JP',
     today: '今日',
-    rating: (r: string, c: string, _n: number) => `評価 ${r}（5 点中）・${c} 件`,
-    count: (c: string) => `${c} 件`,
+    rating: (r: string, c: string, _n: number) => `評価 ${r}（5点中）・${c}件`,
+    count: (c: string) => `${c}件`,
   },
   en: {
     photo: 'Photo:',
@@ -120,25 +120,37 @@ function Stars({ value }: { value: number }) {
   )
 }
 
-// Google マップの評価と、プランの日の営業時間（押すと 1 週間の分を開く）
-export function PlaceFacts({ info, date }: { info: PlaceInfo | null; date: string }) {
+// Google マップの評価（星と件数）。評価が無ければ何も出さない
+export function PlaceRating({ info }: { info: PlaceInfo | null }) {
+  const stars = info && typeof info.rating === 'number' && typeof info.count === 'number' && info.count > 0 ? info.rating : null
+  if (!info || stars === null) return null
+  const rating = stars.toFixed(1)
+  const count = (info.count ?? 0).toLocaleString(T.locale)
+  return (
+    <span className="gplace-rating num" role="img" aria-label={T.rating(rating, count, info.count ?? 0)}>
+      <span aria-hidden="true">{rating}</span>
+      <Stars value={stars} />
+      <span className="gplace-count" aria-hidden="true">
+        {T.count(count)}
+      </span>
+    </span>
+  )
+}
+
+// Google マップの評価と、プランの日の営業時間（押すと 1 週間の分を開く）。rating={false} なら評価は出さない（見出しに出す画面）
+export function PlaceFacts({ info, date, rating: showRating = true }: { info: PlaceInfo | null; date: string; rating?: boolean }) {
   if (!info) return null
   const stars = typeof info.rating === 'number' && typeof info.count === 'number' && info.count > 0 ? info.rating : null
-  const rating = stars === null ? '' : stars.toFixed(1)
-  const count = stars === null ? '' : (info.count ?? 0).toLocaleString(T.locale)
+  const rating = stars === null || !showRating ? '' : stars.toFixed(1)
   const dayIdx = weekIndex(date)
   const when = date === isoDate(new Date()) ? T.today : dateLabel(date)
   const hours = info.hours.length === 7 ? info.hours : []
   if (!rating && !hours.length) return null
   return (
     <div className="gplace">
-      {stars !== null && (
-        <p className="gplace-rating num" role="img" aria-label={T.rating(rating, count, info.count ?? 0)}>
-          <span aria-hidden="true">{rating}</span>
-          <Stars value={stars} />
-          <span className="gplace-count" aria-hidden="true">
-            {T.count(count)}
-          </span>
+      {rating && (
+        <p className="gplace-line">
+          <PlaceRating info={info} />
         </p>
       )}
       {hours.length > 0 && (

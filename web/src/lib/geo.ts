@@ -3,12 +3,14 @@
 // 本番では徒歩は Routes API。日本の電車は Google の API で経路が出ないため、目安と Google マップへのリンクのまま。
 import type { AreaData, Point, RailOpt, TransitRoute, TransitTable } from '../types'
 import { tr } from './i18n'
+import { fmtDur } from './time'
 
 const WORD = tr({
   ja: {
     transit: '電車・バス',
     sep: '・',
     walk: (m: number) => `徒歩 ${m}分`,
+    car: (m: number) => `車 ${fmtDur(m)}`,
     about: (m: number) => `電車・バス 約${m}分`,
     rail: (line: string, m: number) => `${line} 約${m}分`,
     mins: (m: number) => `${m}分`,
@@ -17,6 +19,7 @@ const WORD = tr({
     transit: 'Transit',
     sep: ', ',
     walk: (m: number) => `Walk ${m} min`,
+    car: (m: number) => `Drive ${fmtDur(m)}`,
     about: (m: number) => `Transit ~${m} min`,
     rail: (line: string, m: number) => `${line} ~${m} min`,
     mins: (m: number) => `${m} min`,
@@ -24,18 +27,18 @@ const WORD = tr({
 })
 
 export type Leg = {
-  mode: 'walk' | 'transit'
+  mode: 'walk' | 'transit' | 'car'
   minutes: number
   label: string
   from: Point
   to: Point
   real?: TransitRoute // スクリーンショットから入れた実際の経路
   rail?: RailOpt // 時刻表の無い区間の、乗り換えなしの電車の目安（目安の時間はこの電車から）
-  other?: number // もう片方の手段（徒歩なら電車・バス、電車・バスなら徒歩）の目安の分。区間の手段を選ぶ画面で比べるのに使う
+  other?: number // もう片方の手段（徒歩なら電車・バスか車、電車・バスと車なら徒歩）の目安の分。区間の手段を選ぶ画面で比べるのに使う
   chosen?: boolean // 本人が手段を選んだ区間（自動で選んだ区間は無し）
 }
 
-export type LegMode = 'walk' | 'transit'
+export type LegMode = 'walk' | 'transit' | 'car'
 
 // 区間の名前（出発地は 'start'、到着地は 'end'）。実際の経路はこの名前で覚える
 export const legKey = (fromId: string, toId: string) => `${fromId}>${toId}`
@@ -53,6 +56,14 @@ export function pointsById(d: AreaData): Map<string, Point> {
 }
 
 let O: Map<Point, Map<Point, TransitRoute>> | null = null
+// 車で回る旅か（徒歩と車で回り、電車・バスの経路と時刻表は使わない）
+let CAR = false
+
+export function setCar(on: boolean) {
+  if (CAR === on) return
+  CAR = on
+  cache = new WeakMap()
+}
 // 本人が選んだ区間の手段（legKey ごと）。無い区間は、歩く分と電車・バスの目安で自動に選ぶ
 let P: Map<Point, Map<Point, LegMode>> | null = null
 
@@ -64,7 +75,7 @@ export function setModes(data: AreaData, modes: Record<string, LegMode>) {
     const [a, b] = k.split('>')
     const pa = byId.get(a)
     const pb = byId.get(b)
-    if (!pa || !pb || (m !== 'walk' && m !== 'transit')) continue
+    if (!pa || !pb || (m !== 'walk' && m !== 'transit' && m !== 'car')) continue
     if (!P.has(pa)) P.set(pa, new Map())
     P.get(pa)!.set(pb, m)
   }
@@ -162,6 +173,18 @@ export function transitEstimate(md: number | null, km: number): number {
   return Math.round(km <= 3 ? 10 + 10 * km : 40 + 3 * (km - 3))
 }
 
+// 車で回る旅で、この分まで歩ける区間は歩く
+export const CAR_WALK_MAX = 10
+// 車の区間に足す、駐車場に停めて入口まで歩く手間（分）。入口まで歩く 3〜5 分と、停める・出す・払う 2〜3 分
+export const PARK_MIN = 7
+
+// 道の表に車の時間が無い区間の、車の目安（分）。道のりは直線の 1.3 倍とみて、
+// はじめの 10 km は街なかの時速 30 km、その先は郊外と高速道路をならした時速 50 km で走る
+export function driveEstimate(km: number): number {
+  const road = km * 1.3
+  return Math.max(1, Math.round(Math.min(road, 10) * 2 + Math.max(0, road - 10) * 1.2))
+}
+
 // 同じ 2 点の計算を何千回も繰り返すので、点（オブジェクト）ごとに覚えておく
 let cache = new WeakMap<Point, WeakMap<Point, Leg>>()
 
@@ -180,6 +203,11 @@ export function route(a: Point, b: Point): Leg {
   const hb = M && ib !== undefined ? M.heights[ib] : null
   const cutOff = ia !== undefined && ib !== undefined && M !== null && mw == null && distM(a, b) > NO_WALK_ROUTE_M
   const w = mw != null ? Math.max(1, Math.round(mw + (ha != null && hb != null ? climbMin(mw, hb - ha, road ?? undefined) : 0))) : walkMin(a, b)
+  if (CAR) {
+    const leg = carLeg(a, b, w, md, cutOff, pick)
+    row.set(b, leg)
+    return leg
+  }
   const real = pick === 'walk' && !cutOff ? undefined : O?.get(a)?.get(b)
   if (real) {
     const leg: Leg = { mode: 'transit', minutes: real.minutes, label: realLabel(real), from: a, to: b, real, ...(cutOff ? {} : { other: w }), ...(pick === 'transit' && { chosen: true }) }
@@ -207,14 +235,28 @@ export function route(a: Point, b: Point): Leg {
   return leg
 }
 
+// 車で回る旅の区間。本人が選んだ手段があればそれを（電車・バスを選んでいた区間は車に）、無ければ、
+// 歩いて CAR_WALK_MAX 分以内か、車より早く着くなら歩く。歩く道の無い 2 点（cutOff）は、選んであっても歩かせない
+function carLeg(a: Point, b: Point, w: number, md: number | null, cutOff: boolean, pick: LegMode | undefined): Leg {
+  const drive = (md != null ? Math.max(1, Math.round(md)) : driveEstimate(distM(a, b) / 1000)) + PARK_MIN
+  const walkPick = pick === 'walk' && !cutOff
+  const walk = pick ? walkPick : !cutOff && (w <= CAR_WALK_MAX || w <= drive)
+  const chosen = pick && (pick !== 'walk' || walkPick) ? { chosen: true } : {}
+  return walk
+    ? { mode: 'walk', minutes: w, label: WORD.walk(w), from: a, to: b, other: drive, ...chosen }
+    : { mode: 'car', minutes: drive, label: WORD.car(drive), from: a, to: b, ...(cutOff ? {} : { other: w }), ...chosen }
+}
+
+const travelMode = (leg: Leg) => (leg.mode === 'walk' ? 'walking' : leg.mode === 'car' ? 'driving' : 'transit')
+
 export function mapsDirUrl(leg: Leg): string {
-  const mode = leg.mode === 'walk' ? 'walking' : 'transit'
+  const mode = travelMode(leg)
   return `https://www.google.com/maps/dir/?api=1&origin=${leg.from.lat},${leg.from.lng}&destination=${leg.to.lat},${leg.to.lng}&travelmode=${mode}`
 }
 
 // Google マップのアプリを直接開く URL
 export function mapsAppDirUrl(leg: Leg): string {
-  const mode = leg.mode === 'walk' ? 'walking' : 'transit'
+  const mode = travelMode(leg)
   return `comgooglemaps://?saddr=${leg.from.lat},${leg.from.lng}&daddr=${leg.to.lat},${leg.to.lng}&directionsmode=${mode}`
 }
 

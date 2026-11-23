@@ -1,12 +1,13 @@
 // Google の Places の内容（写真・評価・営業時間）。規約で Google 以外の地図とは一緒に使えないので、
 // 地図が Google マップのときだけ取る。サーバーは取っておかずに返すだけで、画面もページを開いている間だけ
-// （長くても KEEP_MS まで）持つ。取るのは場所の画面と候補の画面を開いたときだけで、一覧の小さな写真は、
-// 開いた画面で取った内容を使い回す（自分では取らない）
+// （長くても KEEP_MS まで）持つ。詳しい内容（評価・営業時間・写真 3 枚）を取るのは場所の画面と候補の画面を開いたときだけ。
+// 一覧の小さな写真は、開いた画面で取った内容があればそれを使い、無ければ行が画面に入ったときに写真の 1 枚目だけを取る（useListPhoto）
 import { useEffect, useState } from 'react'
 import { hasServer } from './api'
 import { loggedFetch } from './apiLog'
 import { googleMapsShown, onMapsShown, onMapsUnavailable } from './gmaps'
 import { lang } from './i18n'
+import { usesGooglePhoto } from './photo'
 import type { AreaData, Spot } from '../types'
 
 export type PlacePhoto = { name: string; width?: number; height?: number; authors: { name: string; uri: string }[] }
@@ -154,7 +155,7 @@ export function usePlaceInfo(spot: Spot | undefined, area: AreaData['area']): Pl
       clearTimeout(timer)
     }
   }, [key, spot?.placeId, asks, shown])
-  const info = shown && got && got.id === key ? got.info : null
+  const info = shown && got && got.id === key ? withListPhoto(spot?.placeId ?? foundIds.get(key), got.info) : null
   return { info, waiting: asks && shown && hasServer && settled !== key }
 }
 
@@ -189,12 +190,135 @@ export function useLoadedPlaceInfo(spot: Spot): PlaceState {
   }, [])
   const placeId = spot.placeId ?? foundIds.get(spot.id)
   const hit = placeId && shown && hasServer ? loaded.get(placeId) : undefined
-  return { info: hit && Date.now() - hit.at < KEEP_MS ? hit.info : null, waiting: false }
+  return { info: hit && Date.now() - hit.at < KEEP_MS ? withListPhoto(placeId, hit.info) : null, waiting: false }
 }
 
-// Google の写真は、場所の画面の大きな写真も一覧の小さな写真も同じ幅で頼む（同じ URL なので、ブラウザが 1 回の読み込みを使い回す）
+// 一覧の小さな写真のために取った、場所ごとの写真の 1 枚目（null は写真が無い・読み込めなかった）
+const LIST_DELAY_MS = 300
+const LIST_PARALLEL = 2
+const listGot = new Map<string, { at: number; photo: PlacePhoto | null }>()
+const listNames = new Set<string>()
+const listWant = new Map<string, number>()
+const listQueue: string[] = []
+const listBusy = new Set<string>()
+let listPausedUntil = 0
+
+const listPaused = () => Date.now() < Math.max(pausedUntil, listPausedUntil)
+const notify = () => listeners.forEach((f) => f())
+
+function listKnown(placeId: string) {
+  const had = listGot.get(placeId)
+  if (had && Date.now() - had.at < KEEP_MS) return had
+  if (had) listGot.delete(placeId)
+  return undefined
+}
+
+function listSettle(placeId: string, photo: PlacePhoto | null) {
+  if (photo) listNames.add(photo.name)
+  listGot.set(placeId, { at: Date.now(), photo })
+}
+
+function listPump() {
+  while (listBusy.size < LIST_PARALLEL && listQueue.length) {
+    if (listPaused()) {
+      listQueue.length = 0
+      listWant.clear()
+      return
+    }
+    const placeId = listQueue.shift() as string
+    listWant.delete(placeId)
+    if (listKnown(placeId) || loaded.has(placeId)) continue
+    listBusy.add(placeId)
+    loggedFetch(`/api/place-thumb/${encodeURIComponent(placeId)}`)
+      .then((r) => {
+        if (r.status === 503 || r.status === 429) {
+          listPausedUntil = Date.now() + PAUSE_MS
+          setTimeout(notify, PAUSE_MS + 50)
+          return
+        }
+        if (r.status === 404) return listSettle(placeId, null)
+        if (!r.ok) return
+        return (r.json() as Promise<{ photo?: PlacePhoto | null }>).then((x) => {
+          const p = x?.photo
+          listSettle(placeId, p && typeof p.name === 'string' && Array.isArray(p.authors) ? p : null)
+        })
+      })
+      .catch(() => {})
+      .finally(() => {
+        listBusy.delete(placeId)
+        notify()
+        listPump()
+      })
+  }
+}
+
+function listAsk(placeId: string) {
+  if (listBusy.has(placeId)) return
+  const n = listWant.get(placeId) ?? 0
+  listWant.set(placeId, n + 1)
+  if (!n) listQueue.push(placeId)
+  listPump()
+}
+
+function listForget(placeId: string) {
+  const n = listWant.get(placeId)
+  if (!n) return
+  if (n > 1) return void listWant.set(placeId, n - 1)
+  listWant.delete(placeId)
+  const i = listQueue.indexOf(placeId)
+  if (i >= 0) listQueue.splice(i, 1)
+}
+
+// 一覧で読み込めなかった写真は、その場所では使わない（場所の画面の大きな写真は、詳しい内容の 1 枚目に戻る）
+export function dropListPhoto(name: string) {
+  for (const [placeId, v] of listGot) if (v.photo?.name === name) listSettle(placeId, null)
+  notify()
+}
+
+// 一覧で取った写真の 1 枚目があれば、詳しい内容の 1 枚目をそれにする（一覧と場所の画面で、同じ写真・同じ URL・同じ作者にする）
+function withListPhoto(placeId: string | undefined, info: PlaceInfo): PlaceInfo {
+  const p = placeId ? listKnown(placeId)?.photo : null
+  if (!p || info.photos[0]?.name === p.name) return info
+  return { ...info, photos: [p, ...info.photos.slice(1)] }
+}
+
+// 一覧の行の小さな写真の 1 枚目。ask で頼まれ、行が画面に見えて（visible）少し経ったときだけサーバーに聞く。
+// Google マップの地図が出ていて、Google の写真を使う場所（photo.ts の usesGooglePhoto）で、place_id があり、
+// 場所の画面で詳しい内容をまだ取っていないときだけ。見えなくなった行と、まだ始めていない頼みは取り消す。
+// pending は、まだ聞いていない・答えを待っている間（枠が尽きて休んでいるときは false）
+export function useListPhoto(spot: Spot, ask: boolean, visible: boolean): { photo: PlacePhoto | null; pending: boolean } {
+  const shown = useGoogleMapShown()
+  const [, bump] = useState(0)
+  useEffect(() => {
+    const f = () => bump((n) => n + 1)
+    listeners.add(f)
+    return () => {
+      listeners.delete(f)
+    }
+  }, [])
+  const placeId = spot.placeId ?? foundIds.get(spot.id)
+  const known = placeId ? listKnown(placeId) : undefined
+  const asks = ask && shown && hasServer && !!placeId && usesGooglePhoto(spot) && !loaded.has(placeId) && !known && !listPaused()
+  useEffect(() => {
+    if (!asks || !visible || !placeId) return
+    let started = false
+    const timer = setTimeout(() => {
+      started = true
+      listAsk(placeId)
+    }, LIST_DELAY_MS)
+    return () => {
+      clearTimeout(timer)
+      if (started) listForget(placeId)
+    }
+  }, [asks, visible, placeId])
+  return { photo: known?.photo ?? null, pending: asks }
+}
+
+// Google の写真は、場所の画面の大きな写真も一覧の小さな写真も同じ幅で頼む（同じ URL なので、ブラウザが 1 回の読み込みを使い回す）。
+// 一覧のために取った写真には list=1 を付け、サーバーは一覧の枠で数える（場所の画面で同じ写真を出すときも同じ URL）
 export const GOOGLE_PHOTO_W = 960
-export const placePhotoUrl = (name: string, w: number = GOOGLE_PHOTO_W) => `/api/place-photo?name=${encodeURIComponent(name)}&w=${w}`
+export const placePhotoUrl = (name: string, w: number = GOOGLE_PHOTO_W) =>
+  `/api/place-photo?name=${encodeURIComponent(name)}&w=${w}${listNames.has(name) ? '&list=1' : ''}`
 
 // その日（YYYY-MM-DD）が月曜から何日目か（0〜6）
 export const weekIndex = (iso: string) => (new Date(`${iso}T00:00:00`).getDay() + 6) % 7

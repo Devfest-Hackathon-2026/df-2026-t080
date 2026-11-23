@@ -18,7 +18,7 @@ PROMPT = '''あなたは、旅のプランを見て、その日に役立つ注�
 - kind は場所の種類（sight 見どころ・street 通り・lunch 昼食・dinner 夕食・cafe 休憩）。best はその場所に向いた時間帯（morning 朝・daytime 昼・evening 夕方から夜）。
 - downside はその場所の注意点。reserve が true の場所は、予約したほうがよさそうな場所。
 - sunset は日の入りの時刻。outdoor が true の場所は屋外。dark が true の場所は、日の入りより後に着く屋外の場所。
-- move は前の場所（最初の場所は出発地）からの移動。by は walk 徒歩・train 電車・bus バス・transit 電車かバス、min は分。end の move は最後の場所からの移動。
+- move は前の場所（最初の場所は出発地）からの移動。by は walk 徒歩・car 車・train 電車・bus バス・transit 電車かバス、min は分。end の move は最後の場所からの移動。
 - holiday が true なら土日か祝日。
 - wear は服装の目安。label は服装、feels は予定の時間帯の体感温度の低い方と高い方（℃。何時ごろかは資料に無い）、notes は傘などの一言。
 

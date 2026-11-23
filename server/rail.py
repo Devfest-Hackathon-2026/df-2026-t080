@@ -1,15 +1,30 @@
 # OpenStreetMap の路線（route relation）と駅から、乗換なしの電車で戸口から戸口までの目安（分）を出す。時刻表ではない（何時何分発は出さない）。
 #   - 路線と駅は Overpass API で取る。範囲（bus.area_box を bus_feeds の clip・snap で丸めた物）ごとに 1 回だけ取り、
 #     cache/rail/ に置く（REFRESH を過ぎたら、古い物を使いながら取り直す）。もっと広い範囲を取ってあれば、それを使う。
-#   - Overpass に聞くのは全体で 1 度に 1 つだけ。続けて聞くときは GAP 秒あける。429・504・時間切れの範囲は RETRY_AFTER 秒は聞かない。
-#     1 日に聞く数も PER_DAY までにする（Overpass の公開サーバーの利用の決まり。定期的に使う物は 1 日 100 回ほどまで）。
+#   - メモリにもディスクにも無ければ、同梱の種（rail_seed/。作り置きと同じ形）を古い物として使い、裏で取り直す。
+#   - 聞く先は URLS の順。込んでいる・時間切れ・つながらないときは、次のサーバーに聞き直す。
+#   - Overpass に聞くのは全サーバーを合わせて 1 度に 1 つだけ。続けて聞くときは GAP 秒あける。全サーバーで取れなかった範囲は
+#     RETRY_AFTER 秒は聞かない。1 日に聞く数も全サーバーの合計で PER_DAY までにする
+#     （Overpass の公開サーバーの利用の決まり。定期的に使う物は 1 日 100 回ほどまで）。
 #   - データは © OpenStreetMap contributors（ODbL）。画面に出典を出す。
 #   - ZT_RAIL=0 で使わない。
 import collections, json, math, os, re, socket, threading, time, traceback, urllib.error, urllib.parse, urllib.request
 
 import bus, bus_feeds
 
-URL = os.environ.get('ZT_OVERPASS_URL', 'https://overpass-api.de/api/interpreter')
+DEFAULT_URLS = ('https://overpass-api.de/api/interpreter', 'https://overpass.kumi.systems/api/interpreter',
+                'https://overpass.private.coffee/api/interpreter')
+
+
+def urls_of(v):
+    """ZT_OVERPASS_URL（カンマ区切り）→ 聞く先の並び。空なら既定の並び"""
+    out = [u.strip() for u in (v or '').split(',') if u.strip()]
+    return tuple(out) or DEFAULT_URLS
+
+
+URLS = urls_of(os.environ.get('ZT_OVERPASS_URL'))
+URL = URLS[0]
+SEED_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'rail_seed')
 UA = bus_feeds.UA
 FORMAT = 1                         # 作り置きの形の版（形を変えたら上げる）
 REFRESH = 14 * 86400               # 取ってからこの秒数を過ぎたら取り直す
@@ -20,14 +35,15 @@ QUEUE_MAX = 8                      # 取る順番を待たせておく範囲の�
 MEM_KEEP = 6                       # メモリに置く範囲の数
 DISK_FILES = 300                   # cache/rail/ に置くファイルの数の上限
 MAX_BYTES = 64 * 1024 * 1024
-TIMEOUT = 120                      # 返事を待つ秒数（問い合わせの timeout:90 より長く）
+TIMEOUT = 200                      # 返事を待つ秒数（問い合わせの timeout:180 より長く）
 MODES = ('subway', 'train', 'light_rail', 'monorail', 'tram')
 STOP_ROLES = ('stop', 'stop_entry_only', 'stop_exit_only')
 PLATFORM_ROLES = ('platform', 'platform_entry_only', 'platform_exit_only')
 TAGS = ('name', 'name:en', 'colour', 'route', 'service', 'interval', 'operator', 'network', 'ref')
-QUERY = ('[out:json][timeout:90];'
+MEMBERS = 'zt:m'                   # 問い合わせで relation の node のメンバーを「ref role;ref role;……」にして入れるタグ
+QUERY = ('[out:json][timeout:180];'
          'relation["type"="route"]["route"~"^(subway|train|light_rail|monorail|tram)$"]({s},{w},{n},{e})->.r;'
-         '.r out body;'
+         '.r convert rel ::id=id(),::=::,"' + MEMBERS + '"=per_member(mtype()=="node"?ref()+" "+role():"");out;'
          '(node(r.r:"stop");node(r.r:"stop_entry_only");node(r.r:"stop_exit_only");'
          'node(r.r:"platform");node(r.r:"platform_entry_only");node(r.r:"platform_exit_only"););out;')
 
@@ -251,13 +267,24 @@ def borrow_colours(lines):
             l.color = best.color
 
 
+def node_members(v):
+    """QUERY の MEMBERS のタグ（「ref role;ref role;……」。node でないメンバーは空）→ [{type, ref, role}]"""
+    out = []
+    for part in (v or '').split(';'):
+        ref, _, role = part.strip().partition(' ')
+        if ref.isdigit():
+            out.append({'type': 'node', 'ref': int(ref), 'role': role.strip()})
+    return out
+
+
 def compact(answer):
-    """Overpass の返事 → 作り置きの形（使う物だけ）"""
+    """Overpass の返事 → 作り置きの形（使う物だけ）。relation は、そのままの形と QUERY の convert の形（type が rel）の両方を読む"""
     rels, nodes = [], {}
     for el in answer.get('elements') or []:
         t = el.get('tags') or {}
-        if el.get('type') == 'relation':
-            members = [[m.get('ref'), m.get('role') or ''] for m in el.get('members') or []
+        if el.get('type') in ('relation', 'rel'):
+            given = node_members(t.get(MEMBERS)) if el.get('type') == 'rel' else el.get('members') or []
+            members = [[m.get('ref'), m.get('role') or ''] for m in given
                        if m.get('type') == 'node' and (m.get('role') in STOP_ROLES or m.get('role') in PLATFORM_ROLES)]
             rels.append({'id': el.get('id'), 'tags': {k: t[k] for k in TAGS if t.get(k)}, 'members': members})
         elif el.get('type') == 'node' and 'lat' in el and 'lon' in el:
@@ -267,9 +294,10 @@ def compact(answer):
 
 # ---- 範囲の路線のまとまり ----
 class Network:
-    def __init__(self, lines, fetched=0.0):
+    def __init__(self, lines, fetched=0.0, seed=False):
         self.lines = lines
         self.fetched = fetched
+        self.seed = seed
         self.grid = {}
         for li, ln in enumerate(lines):
             for k in range(len(ln.lat)):
@@ -373,10 +401,10 @@ def merge(bus_minutes, choices, net, lang='ja'):
 
 
 # ---- Overpass に聞く ----
-def overpass(box, timeout=TIMEOUT):
+def overpass(box, url=None, timeout=TIMEOUT):
     s, w, n, e = box
     q = QUERY.format(s=f'{s:.4f}', w=f'{w:.4f}', n=f'{n:.4f}', e=f'{e:.4f}')
-    req = urllib.request.Request(URL, data=urllib.parse.urlencode({'data': q}).encode(),
+    req = urllib.request.Request(url or URL, data=urllib.parse.urlencode({'data': q}).encode(),
                                  headers={'User-Agent': UA, 'Accept': 'application/json'})
     try:
         with urllib.request.urlopen(req, timeout=timeout) as r:
@@ -417,9 +445,11 @@ _NET = threading.Lock()            # Overpass に聞くのは全体で 1 度に 
 class Store:
     """範囲ごとの路線のまとまり。get(points) → (Network か None, 'ready'・'pending'・'none'・'off')"""
 
-    def __init__(self, cache_dir, fetch=None, now=time.time, sleep=time.sleep, on=enabled):
+    def __init__(self, cache_dir, fetch=None, now=time.time, sleep=time.sleep, on=enabled, urls=None, seed_dir=None):
         self.dir = cache_dir
+        self.seed_dir = seed_dir
         self.fetch = fetch or overpass
+        self.urls = tuple(urls) if urls else URLS
         self.now, self.sleep, self.on = now, sleep, on
         self.lock = threading.Lock()
         self.cv = threading.Condition(self.lock)
@@ -435,16 +465,16 @@ class Store:
         return bool(self.on())
 
     # -- 作り置き --
-    def _read(self, box):
+    def _read(self, box, folder=None, seed=False):
         try:
-            with open(os.path.join(self.dir, box_name(box)), encoding='utf-8') as f:
+            with open(os.path.join(folder or self.dir, box_name(box)), encoding='utf-8') as f:
                 d = json.load(f)
         except (OSError, ValueError):
             return None
         if d.get('format') != FORMAT:
             return None
         try:
-            return Network(lines_of(d), float(d.get('fetched') or 0))
+            return Network(lines_of(d), float(d.get('fetched') or 0), seed)
         except Exception:  # noqa: BLE001
             traceback.print_exc()
             return None
@@ -475,10 +505,10 @@ class Store:
             except OSError:
                 pass
 
-    def _on_disk(self, box):
+    def _on_disk(self, box, folder=None):
         """box を含む作り置きの範囲（狭い順）"""
         try:
-            names = os.listdir(self.dir)
+            names = os.listdir(folder or self.dir)
         except OSError:
             return []
         out = []
@@ -499,7 +529,7 @@ class Store:
             self.mem.popitem(last=False)
 
     def _cached(self, box):
-        """box を含む範囲の Network（メモリ → ディスク）。(Network, その範囲) か (None, None)"""
+        """box を含む範囲の Network（メモリ → ディスク → 種）。(Network, その範囲) か (None, None)"""
         for b in sorted((b for b in self.mem if bus_feeds.contains(b, box)), key=lambda b: (b[2] - b[0]) * (b[3] - b[1])):
             self.mem.move_to_end(b)
             return self.mem[b], b
@@ -508,6 +538,12 @@ class Store:
             if net is not None:
                 self._remember(b, net)
                 return net, b
+        if self.seed_dir:
+            for b in self._on_disk(box, self.seed_dir):
+                net = self._read(b, self.seed_dir, seed=True)
+                if net is not None:
+                    self._remember(b, net)
+                    return net, b
         return None, None
 
     # -- 取る --
@@ -548,35 +584,36 @@ class Store:
     def _obtain(self, box):
         with _NET:
             with self.lock:
-                now = self.now()
                 have, _ = self._cached(box)
-                if have is not None and now - have.fetched <= REFRESH:
+                if have is not None and not have.seed and self.now() - have.fetched <= REFRESH:
                     return
-                while self.asked and now - self.asked[0] > 86400:
-                    self.asked.popleft()
-                if PER_DAY > 0 and len(self.asked) >= PER_DAY:
-                    self.failed[box] = now + RETRY_AFTER
-                    return
-                gap = self.last + GAP - now
-            if gap > 0:
-                self.sleep(gap)
-            with self.lock:
-                self.asked.append(self.now())
-            try:
-                answer = self.fetch(box)
-            except Busy as ex:
-                print(f'rail: Overpass {ex} {box}', flush=True)
+            answer = None
+            for url in self.urls:
+                with self.lock:
+                    now = self.now()
+                    while self.asked and now - self.asked[0] > 86400:
+                        self.asked.popleft()
+                    if PER_DAY > 0 and len(self.asked) >= PER_DAY:
+                        break
+                    gap = self.last + GAP - now
+                if gap > 0:
+                    self.sleep(gap)
+                with self.lock:
+                    self.asked.append(self.now())
+                try:
+                    answer = self.fetch(box, url)
+                    break
+                except Busy as ex:
+                    print(f'rail: Overpass {ex} {urllib.parse.urlparse(url).hostname} {box}', flush=True)
+                except Exception as ex:  # noqa: BLE001
+                    print(f'rail: Overpass failed {type(ex).__name__} {urllib.parse.urlparse(url).hostname} {box}', flush=True)
+                finally:
+                    with self.lock:
+                        self.last = self.now()
+            if answer is None:
                 with self.lock:
                     self.failed[box] = self.now() + RETRY_AFTER
                 return
-            except Exception as ex:  # noqa: BLE001
-                print(f'rail: Overpass failed {type(ex).__name__} {box}', flush=True)
-                with self.lock:
-                    self.failed[box] = self.now() + RETRY_AFTER
-                return
-            finally:
-                with self.lock:
-                    self.last = self.now()
         raw = compact(answer)
         fetched = self.now()
         net = Network(lines_of(raw), fetched)
@@ -591,7 +628,7 @@ class Store:
         with self.lock:
             net, found = self._cached(box)
             if net is not None:
-                if self.now() - net.fetched > REFRESH:
+                if net.seed or self.now() - net.fetched > REFRESH:
                     self._enqueue(found)
                 return net, 'ready'
             if self._enqueue(box):

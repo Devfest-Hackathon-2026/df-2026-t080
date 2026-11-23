@@ -7,7 +7,7 @@ export function RouteWait({ on }: { on: boolean }) {
   return (
     <div className="route-wait" role="status">
       <span className="route-wait-ring" aria-hidden="true" />
-      {tr({ ja: '道を調べています……', en: 'Finding routes…' })}
+      {tr({ ja: '経路を検索しています……', en: 'Finding routes…' })}
     </div>
   )
 }

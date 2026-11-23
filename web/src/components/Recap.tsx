@@ -17,20 +17,20 @@ import { cardFileName, saveCard } from '../lib/cardImage'
 
 const T = tr({
   ja: {
-    failed: 'カードを作れませんでした',
-    noRoom: '端末の空きが足りないため、保存できませんでした',
+    failed: 'カードを作成できませんでした',
+    noRoom: 'デバイスの空き領域が不足しているため、保存できませんでした',
     shareTitle: (a: string) => `${a}の旅の振り返り`,
-    empty: 'スケジュールの場所を押して「選んだ理由」を残すか、「旅のミッション」で写真を撮ると、その場所がカードに大きく載ります。',
-    addWhy: (name: string) => `${name}を選んだ理由を残す`,
+    empty: 'スケジュールの場所をタップして「選んだ理由」を記録するか、「旅のミッション」で写真を撮ると、その場所がカードに大きく表示されます。',
+    addWhy: (name: string) => `${name}を選んだ理由を記録`,
     ask: 'イメージと合っていましたか？',
     hitLabel: (n: string) => `${n}はイメージと合っていたか`,
     yes: '合っていた',
     no: 'イメージと違った',
     card: 'カード',
     alt: '旅の振り返りカード',
-    making: 'カードを作っています……',
+    making: 'カードを作成しています……',
     save: '画像を保存・共有',
-    local: '写真と理由は、この端末の中だけで扱い、サーバーには送りません。',
+    local: '写真と理由はこのデバイスにのみ保存され、サーバーには送信されません。',
   },
   en: {
     failed: 'Couldn’t make the card',
@@ -56,6 +56,7 @@ const T = tr({
 // planDate: プランの日（ISO。プランの題に使う）。usual: よくある回り方（混雑の 1 行に使う）。buses: 区間ごとの見つけた便（区間の乗り物に使う）
 export function Recap({
   area,
+  name,
   date,
   planDate,
   data,
@@ -69,6 +70,8 @@ export function Recap({
   onWhy,
 }: {
   area: string
+  // カード・見出し・保存の名前に使う題（無ければ area）。理由とミッションは area で取ってある
+  name?: string
   date: string
   planDate: string
   data: AreaData
@@ -81,15 +84,16 @@ export function Recap({
   onNotice: (text: string) => void
   onWhy?: (spotId: string) => void
 }) {
+  const title = name ?? area
   const { trip: whyTrip, get, put } = useTripWhy(area)
   const [odaiTrip] = useTripOdai(area)
   const whys = useMemo(() => whyTrip.items.filter((w) => w.at >= since), [whyTrip, since])
   const odai = useMemo(() => odaiTrip.items.filter((o) => o.at >= since), [odaiTrip, since])
   const rows = useMemo(() => buildRows(plan, whys, odai), [plan, whys, odai])
   const card = useMemo(() => {
-    const title = highlightParts(highlights(data, plan, input), planDate, input.conds.map((c) => c.tag), input.conds)
-    return recapInput({ area, date, title, start: data.start.name, goal: goalOf(data).name, plan, usual, buses, whys, odai })
-  }, [area, date, planDate, data, input, plan, usual, buses, whys, odai])
+    const parts = highlightParts(highlights(data, plan, input), planDate, input.conds.map((c) => c.tag), input.conds)
+    return recapInput({ area: title, date, title: parts, start: data.start.name, goal: goalOf(data).name, plan, usual, buses, whys, odai })
+  }, [title, date, planDate, data, input, plan, usual, buses, whys, odai])
   const [url, setUrl] = useState('')
   const [busy, setBusy] = useState(false)
   const blob = useRef<Blob | null>(null)
@@ -140,11 +144,11 @@ export function Recap({
   }
 
   const save = () => {
-    if (blob.current) void saveCard(blob.current, url, cardFileName(area), T.shareTitle(area))
+    if (blob.current) void saveCard(blob.current, url, cardFileName(title), T.shareTitle(title))
   }
 
   return (
-    <Sheet title={RECAP_WORDS.title} lead={RECAP_WORDS.when(area, date)} onClose={onClose}>
+    <Sheet title={RECAP_WORDS.title} lead={RECAP_WORDS.when(title, date)} onClose={onClose}>
       {rows.length === 0 ? (
         <>
           <Text as="p" display="block" type="supporting" className="note">

@@ -3,14 +3,15 @@ import { Button } from '@astryxdesign/core/Button'
 import { Heading } from '@astryxdesign/core/Heading'
 import { Text } from '@astryxdesign/core/Text'
 import type { AreaData, Spot } from '../types'
-import { hourly } from '../lib/crowd'
+import { hourly, peakRange } from '../lib/crowd'
 import { isEmpty, useTripWhy } from '../lib/why'
 import { mapsAppPlaceUrl, mapsPlaceUrl } from '../lib/geo'
 import { usePlaceInfo } from '../lib/place'
 import type { Day } from '../lib/crowd'
 import { GeminiMark } from './GeminiMark'
 import { FOUND_NO_CROWD, FOUND_ROLE, isFound } from '../lib/found'
-import { PlaceFacts, PlaceHero } from './GooglePlace'
+import { PlaceFacts, PlaceHero, PlaceRating } from './GooglePlace'
+import { CrowdMark } from './CrowdMark'
 import { HourBars } from './HourBars'
 import { MapsLink } from './MapsLink'
 import { Sheet } from './Sheet'
@@ -19,7 +20,7 @@ import { tr } from '../lib/i18n'
 import { PLACE_WORDS as W, searchName } from './placeWords'
 
 const T = tr({
-  ja: { swap: '入れ替える', add: 'プランに入れる', later: '「プランに入れる」をタップすると保存されます' },
+  ja: { swap: '入れ替える', add: 'プランに追加', later: '「プランに追加」をタップすると保存されます' },
   en: { swap: 'Swap', add: 'Add to Plan', later: 'Saved when you tap Add to Plan' },
 })
 
@@ -60,6 +61,9 @@ export function CandidateSheet({
 }) {
   const role = isFound(spot) ? FOUND_ROLE : spot.kind === 'food' || spot.kind === 'cafe' ? W.kind[spot.kind] : spot.role === 'famous' ? W.famous : (spot.theme ?? W.hidden)
   const place = usePlaceInfo(spot, data.area)
+  const levels = hourly(spot, day)
+  const peak = isFound(spot) ? null : peakRange(spot, day)
+  const peakLv = Math.max(...levels.filter((_, i) => !spot.filled?.crowd?.includes(i)))
   const { get, put } = useTripWhy(data.area.name)
   const [draft, setDraft] = useState<WhyDraft>({ chips: [], text: '' })
   const [stored, setStored] = useState(false)
@@ -72,45 +76,59 @@ export function CandidateSheet({
       setStored(false)
     } else setStored(true)
   }
-  // 理由が入っていれば、欠点を見たうえで選んだ記録として残してから、プランに入れる
+  // 理由が入っていれば、欠点を見たうえで選んだ記録として残してから、プランに追加
   const add = () => {
     if (!isEmpty(draft) && !put({ spotId: spot.id, spotName: spot.name, chips: draft.chips, text: draft.text.trim(), downsideSeen: spot.downside, at: Date.now() })) {
       onNotice(W.noRoom)
     }
     onAdd?.(spot.id)
   }
+  // 食事とカフェは、メニューと口コミを見に行くリンクを、特徴と注意点のすぐ下に出す（ほかの場所は画面の下）
+  const eats = spot.kind === 'food' || spot.kind === 'cafe'
+  const mapsLink = (
+    <div className="link-row">
+      <MapsLink
+        className="text-link"
+        web={place.info?.mapsUri || mapsPlaceUrl(searchName(spot), searchName(data.area))}
+        app={mapsAppPlaceUrl(searchName(spot), searchName(data.area))}
+      >
+        {eats ? W.mapsMenu : W.maps}
+      </MapsLink>
+    </div>
+  )
   return (
-    <Sheet title={spot.name} lead={[role, spot.district].filter(Boolean).join(W.sep)} onClose={onClose} card={card} back={back ?? !!onSwap}>
-      <section className="sheet-sec first">
-        <Heading level={3} className="sec-title">
-          {W.busy}
-        </Heading>
-        {isFound(spot) ? (
-          <Text as="p" display="block" type="supporting" className="note">
-            {FOUND_NO_CROWD}
-          </Text>
-        ) : (
-          <>
-            <HourBars levels={hourly(spot, day)} visitHour={visitHour} gaps={spot.filled?.crowd} />
-            <Text as="p" display="block" type="supporting" className="note">
-              <GeminiMark />
-              {W.estimate(day === 'holiday')}
-              {spot.basis}
-            </Text>
-          </>
-        )}
-      </section>
+    <Sheet
+      title={spot.name}
+      lead={
+        <>
+          <span className="cand-lead cand-meta">
+            <span>{[role, spot.district].filter(Boolean).join(W.sep)}</span>
+            <PlaceRating info={place.info} />
+          </span>
+          {peak && (
+            <span className="cand-lead cand-peak">
+              <span className="num">{peak}</span>
+              <CrowdMark level={peakLv} />
+            </span>
+          )}
+        </>
+      }
+      onClose={onClose}
+      card={card}
+      back={back ?? !!onSwap}
+    >
       <PlaceHero spot={spot} place={place} />
-      <PlaceFacts info={place.info} date={planDate} />
       {!isFound(spot) && (
       <dl className="facts cand-facts">
-        <div>
-          <dt>{W.why}</dt>
-          <dd>
-            <GeminiMark />
-            {spot.why}
-          </dd>
-        </div>
+        {spot.why && (
+          <div>
+            <dt>{W.why}</dt>
+            <dd>
+              <GeminiMark />
+              {spot.why}
+            </dd>
+          </div>
+        )}
         <div>
           <dt>{W.downside}</dt>
           <dd>
@@ -120,21 +138,34 @@ export function CandidateSheet({
         </div>
       </dl>
       )}
+      {eats && mapsLink}
+      <PlaceFacts info={place.info} date={planDate} rating={false} />
+      <section className="sheet-sec cand-crowd">
+        <Heading level={3} className="sec-title">
+          {W.busy}
+        </Heading>
+        {isFound(spot) ? (
+          <Text as="p" display="block" type="supporting" className="note">
+            {FOUND_NO_CROWD}
+          </Text>
+        ) : (
+          <>
+            <HourBars levels={levels} visitHour={visitHour} gaps={spot.filled?.crowd} />
+            <Text as="p" display="block" type="supporting" className="note">
+              <GeminiMark />
+              {W.estimate(day === 'holiday')}
+              {spot.basis}
+            </Text>
+          </>
+        )}
+      </section>
       {!onSwap &&
         (picked ? (
           <WhyField value={{ chips: mine?.chips ?? [], text: mine?.text ?? '' }} onChange={editPicked} status={stored ? WHY_SAVED : ''} />
         ) : (
           <WhyField want value={draft} onChange={setDraft} status={isEmpty(draft) || !onAdd ? '' : T.later} />
         ))}
-      <div className="link-row">
-        <MapsLink
-          className="text-link"
-          web={place.info?.mapsUri || mapsPlaceUrl(searchName(spot), searchName(data.area))}
-          app={mapsAppPlaceUrl(searchName(spot), searchName(data.area))}
-        >
-          {W.maps}
-        </MapsLink>
-      </div>
+      {!eats && mapsLink}
       <div className="cand-bar">
         {onSwap ? (
           <Button variant="primary" size="lg" width="100%" label={T.swap} onClick={onSwap} />

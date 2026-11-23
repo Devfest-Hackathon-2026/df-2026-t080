@@ -6,12 +6,16 @@
 #   find(p, area)       … まだ照合していない候補の場所の画面を開いたときに、その 1 か所だけ照合する（画面の枠を使う）
 #   expire(plist)       … 位置を取って 30 日を過ぎた候補を、照合の前の位置に戻す（呼び出しなし）
 #   details(place_id)   … 評価・営業時間・Google マップの URL・写真 3 枚（場所の画面を開いたときだけ）
+#   thumb(place_id)     … 写真 1 枚だけ（photos のフィールドだけ。一覧の行が画面に入ったときだけ）
 #   photo_uri(name, w)  … 写真の URL（Place Photo）
 # 認証は、ZT_GCLOUD_TOKEN_CMD があればそのコマンドが出すトークン（手元）、なければ google-auth のサービス アカウント（Cloud Run）。
 # ZT_PLACES_PROJECT（課金するプロジェクト）が無いときは使わない。呼び出しは 1 時間あたり ZT_PLACES_PER_HOUR（既定 300・0 で上限なし）まで。
 # そのうち候補をまとめての照合（search・location）に使えるのは ZT_PLACES_BULK_PER_HOUR（既定はその 3 分の 1）までで、
 # 残りは人が開いた場所の画面（details・photo・find）のために空けておく。
 # 1 日（直前の 24 時間）の上限も同じ形で、ZT_PLACES_PER_DAY（既定 0＝上限なし）と ZT_PLACES_BULK_PER_DAY（既定はその 3 分の 1）。
+# 一覧の小さな写真（thumb と、一覧から頼まれた写真）は、これとは別の枠で数える。1 時間 ZT_PLACES_LIST_PER_HOUR（既定 150）・
+# 1 日 ZT_PLACES_LIST_PER_DAY（既定 300）まで（0 で上限なし）。この枠に届いても場所の画面の詳細と写真は止まらず、
+# 場所の画面の枠（1 時間・1 日）に届いたときは一覧の分も止める。
 # 数えるのはこのサーバーのメモリの中だけ（起動し直すと 0 から）。
 # 規約で、サーバーに取っておいてよいのは place_id（期限なし）と緯度経度（30 日まで）だけ。
 # 評価・営業時間・写真とその名前は、画面に返すだけで取っておかない。
@@ -28,11 +32,16 @@ BULK_PER_HOUR = int(os.environ.get('ZT_PLACES_BULK_PER_HOUR') or PER_HOUR // 3)
 PER_DAY = int(os.environ.get('ZT_PLACES_PER_DAY', '0'))
 BULK_PER_DAY = int(os.environ.get('ZT_PLACES_BULK_PER_DAY') or PER_DAY // 3)
 BULK = ('search', 'location')
+LIST_PER_HOUR = int(os.environ.get('ZT_PLACES_LIST_PER_HOUR', '150'))
+LIST_PER_DAY = int(os.environ.get('ZT_PLACES_LIST_PER_DAY', '300'))
+LIST = ('thumb', 'thumb_photo')
+LIST_SAY_EVERY = 20                  # 一覧の分を何回ごとに記録に書くか
 TOKEN_CMD = os.environ.get('ZT_GCLOUD_TOKEN_CMD', '').strip()
 TOKEN_TTL = 300                      # コマンドで得たトークンを使い回す長さ（秒）
 KEEP_DAYS = 30                       # Google の緯度経度を取っておける日数
 WORKERS = 6                          # 照合を同時に問い合わせる数
-SEARCH_FIELDS = 'places.id,places.location,places.displayName,places.formattedAddress,places.types,places.primaryTypeDisplayName'
+SEARCH_FIELDS = ('places.id,places.location,places.displayName,places.formattedAddress,places.types,places.primaryTypeDisplayName,'
+                 'places.businessStatus')
 # 「この付近で検索」（地図に写っている範囲で探す）。照合と見る物の枠とは別に、1 日の上限を持つ
 AREA_PER_DAY = int(os.environ.get('ZT_PLACES_AREA_PER_DAY', '100'))
 AREA_FIELDS = ('places.id,places.location,places.displayName,places.primaryType,places.primaryTypeDisplayName,places.rating,'
@@ -43,10 +52,11 @@ DETAIL_FIELDS = ('displayName,location,primaryType,rating,userRatingCount,regula
 PLACE_ID = re.compile(r'^[A-Za-z0-9_-]{10,300}$')
 PHOTO_NAME = re.compile(r'^places/[A-Za-z0-9_-]{10,300}/photos/[A-Za-z0-9_-]{10,1200}$')
 
-COUNT = {'search': 0, 'location': 0, 'details': 0, 'photo': 0, 'find': 0, 'area': 0}
-DENIED = {'search': 0, 'location': 0, 'details': 0, 'photo': 0, 'find': 0, 'area': 0}
+COUNT = {'search': 0, 'location': 0, 'details': 0, 'photo': 0, 'find': 0, 'area': 0, 'thumb': 0, 'thumb_photo': 0}
+DENIED = {'search': 0, 'location': 0, 'details': 0, 'photo': 0, 'find': 0, 'area': 0, 'thumb': 0, 'thumb_photo': 0}
 _times, _rate = [], threading.Lock()
 _area_times = []
+_list_times = []
 _said = {}
 _tok, _tok_lock = {'v': '', 'at': 0.0, 'fail': 0.0, 'creds': None}, threading.Lock()
 
@@ -123,6 +133,37 @@ def _take(kind):
         return True
 
 
+def _list_said():
+    return (f"詳細 {COUNT['thumb']} 回・写真 {COUNT['thumb_photo']} 回・"
+            f"断った数 {DENIED['thumb'] + DENIED['thumb_photo']}")
+
+
+def _take_list(kind):
+    """一覧の小さな写真の枠があれば 1 回分を使う。場所の画面の枠に届いているときも断る（場所の画面の枠は使わない）"""
+    now = time.time()
+    with _rate:
+        _times[:] = [(t, b) for t, b in _times if now - t < (86400 if PER_DAY > 0 else 3600)]
+        _list_times[:] = [t for t in _list_times if now - t < 86400]
+        why = _full([b for t, b in _times if now - t < 3600], PER_HOUR, 0, False) or _full([b for _, b in _times], PER_DAY, 0, False)
+        if not why:
+            hour = sum(1 for t in _list_times if now - t < 3600)
+            if LIST_PER_HOUR > 0 and hour >= LIST_PER_HOUR:
+                why = f'一覧の 1 時間 {LIST_PER_HOUR} 回'
+            elif LIST_PER_DAY > 0 and len(_list_times) >= LIST_PER_DAY:
+                why = f'一覧の 1 日 {LIST_PER_DAY} 回'
+        if why:
+            DENIED[kind] += 1
+            if now - _said.get('list', 0) >= 60:
+                _said['list'] = now
+                print(f'[places] 一覧の写真の上限（{why}）に届きました（{_list_said()}）', flush=True)
+            return False
+        _list_times.append(now)
+        COUNT[kind] += 1
+        if (COUNT['thumb'] + COUNT['thumb_photo']) % LIST_SAY_EVERY == 0:
+            print(f'[places] 一覧の写真: {_list_said()}', flush=True)
+        return True
+
+
 def _take_area():
     """「この付近で検索」の 1 日の枠があれば 1 回分を使う（照合と見る物の枠は使わない）"""
     now = time.time()
@@ -146,7 +187,7 @@ def _call(kind, path, query=None, body=None, fields=''):
     tok = _token()
     if not tok:
         raise Off('token')
-    if not (_take_area() if kind == 'area' else _take(kind)):
+    if not (_take_area() if kind == 'area' else _take_list(kind) if kind in LIST else _take(kind)):
         raise Off('limit')
     headers = {'Authorization': 'Bearer ' + tok, 'X-Goog-User-Project': PROJECT}
     if fields:
@@ -177,7 +218,8 @@ def _call(kind, path, query=None, body=None, fields=''):
 
 
 def search(query, center, radius_m, kind='search'):
-    """Text Search → [{'id', 'name', 'lat', 'lng'}]（kind は数える枠。場所の画面から 1 か所だけなら 'find'）"""
+    """Text Search → [{'id', 'name', 'lat', 'lng', 'types', 'label', 'status'}]（kind は数える枠。場所の画面から 1 か所だけなら 'find'）。
+    status は Places の businessStatus（営業中は OPERATIONAL。返らなければ空）"""
     body = {'textQuery': query, 'languageCode': 'ja', 'regionCode': 'JP', 'pageSize': 5,
             'locationBias': {'circle': {'center': {'latitude': center[0], 'longitude': center[1]},
                                         'radius': max(1000.0, min(50000.0, radius_m))}}}
@@ -189,7 +231,8 @@ def search(query, center, radius_m, kind='search'):
             out.append({'id': x['id'], 'name': (x.get('displayName') or {}).get('text') or '',
                         'lat': float(loc['latitude']), 'lng': float(loc['longitude']),
                         'types': [t for t in x.get('types') or [] if isinstance(t, str)],
-                        'label': (x.get('primaryTypeDisplayName') or {}).get('text') or ''})
+                        'label': (x.get('primaryTypeDisplayName') or {}).get('text') or '',
+                        'status': x.get('businessStatus') if isinstance(x.get('businessStatus'), str) else ''})
     return out
 
 
@@ -217,6 +260,14 @@ def not_sight(p, hit):
     if types & _SIGHT:
         return False
     return bool(types & _NOT_SIGHT) or bool(_NOT_SIGHT_LABEL.search(f"{hit.get('label') or ''} {hit.get('name') or ''}"))
+
+
+_CLOSED = {'CLOSED_TEMPORARILY', 'CLOSED_PERMANENTLY'}
+
+
+def closed(p, hit):
+    """候補が、照合した Places では臨時休業か閉業になっているか。希望に名前を書いた場所は外さない"""
+    return not p.get('named') and hit.get('status') in _CLOSED
 
 
 # 場所の種類（Places の primaryType）を、候補の種類（sight・street・food・cafe）に分ける
@@ -343,12 +394,7 @@ def details(place_id, lang='ja'):
     for line in (d.get('regularOpeningHours') or {}).get('weekdayDescriptions') or []:
         day, _, text = str(line).partition(': ')
         hours.append({'day': day.strip(), 'text': _hours_text(text) if lang != 'en' else _hours_text_en(text)})
-    photos = []
-    for ph in (d.get('photos') or [])[:3]:
-        if PHOTO_NAME.match(ph.get('name') or ''):
-            photos.append({'name': ph['name'], 'width': ph.get('widthPx'), 'height': ph.get('heightPx'),
-                           'authors': [{'name': str(a.get('displayName') or ''), 'uri': _author_uri(a.get('uri'))}
-                                       for a in ph.get('authorAttributions') or [] if a.get('displayName')]})
+    photos = [x for x in map(_photo, (d.get('photos') or [])[:3]) if x]
     uri = str(d.get('googleMapsUri') or '')
     loc = d.get('location') or {}
     pos = {'lat': float(loc['latitude']), 'lng': float(loc['longitude'])} if 'latitude' in loc and 'longitude' in loc else {}
@@ -357,11 +403,33 @@ def details(place_id, lang='ja'):
             'periods': periods_of(d.get('regularOpeningHours')), 'mapsUri': uri if uri.startswith('https://') else '', 'photos': photos}
 
 
-def photo_uri(name, width):
-    """写真の名前から、写真そのものの URL（認証の要らない URL）。無ければ None"""
+def _photo(ph):
+    """Places の photos の 1 つ → {'name', 'width', 'height', 'authors'}。名前の形が違えば None"""
+    if not PHOTO_NAME.match(ph.get('name') or ''):
+        return None
+    return {'name': ph['name'], 'width': ph.get('widthPx'), 'height': ph.get('heightPx'),
+            'authors': [{'name': str(a.get('displayName') or ''), 'uri': _author_uri(a.get('uri'))}
+                        for a in ph.get('authorAttributions') or [] if a.get('displayName')]}
+
+
+def thumb(place_id):
+    """一覧の小さな写真用に、写真の 1 枚目だけ（photos のフィールドだけを頼む）→ {'photo': 写真か None}。
+    場所が無ければ None。取っておかずにそのまま返す"""
+    if not PLACE_ID.match(place_id or ''):
+        return None
+    d = _call('thumb', f'places/{place_id}', fields='photos')
+    if d is None:
+        return None
+    got = [x for x in map(_photo, d.get('photos') or []) if x]
+    return {'photo': got[0] if got else None}
+
+
+def photo_uri(name, width, kind='photo'):
+    """写真の名前から、写真そのものの URL（認証の要らない URL）。無ければ None。
+    kind は数える枠（一覧の小さな写真から頼まれたときは 'thumb_photo'）"""
     if not PHOTO_NAME.match(name or ''):
         return None
-    d = _call('photo', f'{name}/media', query={'maxWidthPx': max(100, min(1600, int(width))), 'skipHttpRedirect': 'true'})
+    d = _call(kind, f'{name}/media', query={'maxWidthPx': max(100, min(1600, int(width))), 'skipHttpRedirect': 'true'})
     uri = str((d or {}).get('photoUri') or '')
     return uri if uri.startswith('https://') else None
 
@@ -477,6 +545,7 @@ def _set(p, pid, lat, lng, now):
         p['guess'] = [p['lat'], p['lng']]
     p['placeId'], p['lat'], p['lng'], p['locatedAt'], p['verified'] = pid, lat, lng, int(now), True
     p.pop('placeMiss', None)
+    p.pop('unfound', None)
 
 
 def locate(plist, area):
@@ -532,6 +601,8 @@ def locate(plist, area):
             _set(p, hit['id'], hit['lat'], hit['lng'], time.time())
             if not_sight(p, hit):
                 p['notSight'] = True
+            if closed(p, hit):
+                p['closed'] = True
         else:
             p['placeMiss'] = True
     with ThreadPoolExecutor(WORKERS) as ex:

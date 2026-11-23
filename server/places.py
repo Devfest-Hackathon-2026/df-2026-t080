@@ -108,7 +108,7 @@ TASKS = {
 希望: {wish}
 - conditions の tag は下の語から選び、label は画面に出す短い名詞句（例: 「海の近く」「静かな場所」「そば」）。「有名な場所に行きたい」は tag「有名」、「混雑を避けたい」「のんびり」は tag「静か」にする。
 - places は希望に合う場所だけ（例: 希望に「そば」があれば、そばの店）。合う場所がなければ空の配列。
-- 希望が行きたい場所や地名を名指ししている（例: 「〇〇寺に行きたい」「〇〇に寄りたい」）ときは、その場所（地名なら、そこを代表する場所 1 件）を places に入れ、named を true にする。エリアの外でも、出発地から 25 km ほどまでの日帰りで寄れる所なら出す。
+- 希望が行きたい場所や地名を名指ししている（例: 「〇〇寺に行きたい」「〇〇に寄りたい」）ときは、その場所（地名なら、そこを代表する場所 1 件）を places に入れ、named を true にする。エリアの外の場所も出す（{reach}より遠い場所は、アプリが外して利用者に知らせる）。
 - 希望に名指しされていない場所は、named を false にする。名指しの無い希望（「静かな場所」「そば」など）では、すべて false にする。
 {rules}
 形: {{"conditions":[{{"tag":"","label":""}}],"places":[{place}]}}'''),
@@ -166,15 +166,21 @@ def hidden_context(task, ctx, lang):
     return '\n'.join(lines)
 
 
-def build_prompt(task, area, wish='', lang='ja', ctx=None):
-    """task の頼みの文。ctx は 2 段目の頼みに渡す前の頼みの答え（hidden_* には clean_themes の結果）"""
+# 希望に名前を書いた場所を、エリアの外でも出す範囲（頼みの文）。車で回る旅は WISH_KM_CAR まで
+REACH = '出発地から 25 km ほどまでの日帰りで寄れる所'
+REACH_CAR = '出発地から車で片道 2 時間ほど（70 km ほど）までの所'
+
+
+def build_prompt(task, area, wish='', lang='ja', ctx=None, car=False):
+    """task の頼みの文。ctx は 2 段目の頼みに渡す前の頼みの答え（hidden_* には clean_themes の結果）。
+    car: 車で回る旅（希望の頼みで、エリアの外の名指しの場所を出す範囲を広げる）"""
     en = lang == 'en'
     place = PLACE.replace('"name":""', '"name":"","name_ja":""') if en else PLACE
     if task.startswith('hidden'):
         place = place.replace('"role":"famous"', '"role":"hidden"').replace('"basis":""', '"basis":"","theme":1')
     if task == 'wish':
         place = place.replace('"basis":""', '"basis":"","named":false')
-    fields = dict(area=area, wish=wish or '（なし）', rules=RULES.format(tags='、'.join(TAGS)), place=place,
+    fields = dict(area=area, wish=wish or '（なし）', rules=RULES.format(tags='、'.join(TAGS)), place=place, reach=REACH_CAR if car else REACH,
                   n=THEME_COUNT if task == 'themes' else HIDDEN_PER_THEME, types=THEME_TYPES)
     if task.startswith('hidden'):
         fields['context'] = hidden_context(task, ctx, lang)
@@ -418,22 +424,36 @@ def clean_conditions(raw, lang='ja'):
     return out
 
 
-BRANCH = re.compile(r'(本店|本館|支店|.{0,4}店)?')
+BRANCH = re.compile(r'(本店|本館|支店|.{0,4}店|商店街)?')
 OLD_KANJI = str.maketrans('藝舊澤濱﨑髙邊邉齋齊櫻廣國當驛', '芸旧沢浜崎高辺辺斎斉桜広国当駅')   # 同じ場所かを見るときだけ、旧字を新字にそろえる
+KANA = str.maketrans({chr(c): chr(c - 0x60) for c in range(0x30A1, 0x30F7)})   # 片仮名を平仮名に（国際通リ と 国際通り）
+PREFIX_MAX = 4                   # 見どころと通りで kind が食い違っても同じ場所とみなす、頭に付いた地名の長さ
+SAME_M = 400                     # 同じ場所の言い換えとみなす距離（通りどうしは長いので STREET_SAME_M）
+STREET_SAME_M = 800
+
+
+def same_key(p):
+    """同じ場所かを比べるための名前（旧字を新字に・片仮名を平仮名に）"""
+    return norm_name(jname(p)).lower().translate(OLD_KANJI).translate(KANA)
 
 
 def near_same(a, b):
-    """同じ場所を、別の頼みが少し違う名前で返した物か。kind が同じで 400 m 以内、かつ長い方の名前の中で、
-    短い方の名前のあとが空か店の名前（「本店」「渋谷店」など）だけ。例: 日枝神社 と 飛騨山王宮日枝神社、つたふじ と 中華そば つたふじ 本店。
-    千光寺 と 千光寺公園頂上展望台・天寧寺 と 天寧寺三重塔 は、前が同じでも別の場所なので残す。
+    """同じ場所を、別の頼みが少し違う名前で返した物か。400 m 以内（通りどうしは 800 m 以内）で、長い方の名前の中で短い方の名前のあとが空か、
+    店の名前（「本店」「渋谷店」など）か「商店街」だけ。kind は同じこと（見どころと通りの食い違いは、
+    違いが頭の地名（PREFIX_MAX 字まで）だけのときに限って同じとみなす）。
+    例: 日枝神社 と 飛騨山王宮日枝神社、つたふじ と 中華そば つたふじ 本店、国際通リ と 那覇国際通り商店街、金城町石畳道 と 首里金城町石畳道。
+    千光寺 と 千光寺公園頂上展望台・天寧寺 と 天寧寺三重塔・国際通り と 国際通り屋台村・待乳山聖天 と 待乳山聖天公園 は、前が同じでも別の場所なので残す。
     表参道（通り）と表参道ヒルズ（建物）は kind が違うので別"""
-    if a['kind'] != b['kind']:
-        return False
-    x, y = sorted((norm_name(jname(a)).lower().translate(OLD_KANJI), norm_name(jname(b)).lower().translate(OLD_KANJI)), key=len)
-    if len(x) < 3 or dist_m((a['lat'], a['lng']), (b['lat'], b['lng'])) > 400:
+    x, y = sorted((same_key(a), same_key(b)), key=len)
+    near = STREET_SAME_M if a['kind'] == b['kind'] == 'street' else SAME_M
+    if len(x) < 3 or dist_m((a['lat'], a['lng']), (b['lat'], b['lng'])) > near:
         return False
     i = y.rfind(x)
-    return i >= 0 and BRANCH.fullmatch(y[i + len(x):]) is not None
+    if i < 0:
+        return False
+    if a['kind'] != b['kind']:
+        return {a['kind'], b['kind']} == {'sight', 'street'} and i + len(x) == len(y) and 0 < i <= PREFIX_MAX
+    return BRANCH.fullmatch(y[i + len(x):]) is not None
 
 
 def merge_places(*lists):
@@ -445,6 +465,12 @@ def merge_places(*lists):
                 seen.add(p['id'])
                 out.append(p)
     return out
+
+
+def with_wish(wish, area):
+    """希望の場所と候補を 1 つの並びにする（希望の場所を先に。同じ id と、希望の場所の言い換え（near_same）の候補は除く）"""
+    ids = {p['id'] for p in wish}
+    return list(wish) + [p for p in area if p['id'] not in ids and not any(near_same(w, p) for w in wish)]
 
 
 # ---- 地図データ（OpenStreetMap の Nominatim）で位置を確かめる。本番は Places API に置き換える ----
@@ -557,6 +583,11 @@ def verify_one(p, area, cache):
     p['verified'] = False
 
 
+def unfound(p):
+    """Places でも地図のデータでも見つからなかった候補か（人気スポットと、希望に名前を書いた場所は除く）"""
+    return bool(p.get('placeMiss')) and p.get('verified') is False and p.get('source') != 'famous' and not p.get('named')
+
+
 def in_area(p, area):
     if (area['lat'], area['lng']) == (0.0, 0.0):
         return True
@@ -567,14 +598,17 @@ def in_area(p, area):
 # 博多・天神から太宰府天満宮は直線で約 13〜15 km（電車で 30 分ほど）。直線 25 km は電車で片道 30〜40 分ほどで、
 # 1 日の旅に寄り道として入れられる上限の目安（片道の旅の出発地と到着地の上限 MAX_TRIP_KM 30 km より少し短い）
 WISH_KM = 25.0
+# 車で回る旅の上限。直線 70 km は道のりで 90 km ほどで、高速道路を使って片道 2 時間ほど
+# （那覇空港から美ら海水族館は直線 約 59 km・沖縄市からは 約 45 km）
+WISH_KM_CAR = 70.0
 
 
-def in_reach(p, area, ends=()):
-    """希望の場所を残すか（エリアの範囲の中か、出発地・到着地・中心のどれかから WISH_KM 以内）"""
+def in_reach(p, area, ends=(), km=WISH_KM):
+    """希望の場所を残すか（エリアの範囲の中か、出発地・到着地・中心のどれかから km 以内）"""
     if in_area(p, area):
         return True
     pts = [(area['lat'], area['lng'])] + [(e['lat'], e['lng']) for e in ends if isinstance(e, dict) and 'lat' in e]
-    return min(dist_m(q, (p['lat'], p['lng'])) for q in pts) <= WISH_KM * 1000
+    return min(dist_m(q, (p['lat'], p['lng'])) for q in pts) <= km * 1000
 
 
 def reach_area(area, plist):
@@ -676,6 +710,12 @@ PREFS = [('北海道', 'Hokkaido'), ('青森県', 'Aomori'), ('岩手県', 'Iwat
          ('徳島県', 'Tokushima'), ('香川県', 'Kagawa'), ('愛媛県', 'Ehime'), ('高知県', 'Kochi'), ('福岡県', 'Fukuoka'),
          ('佐賀県', 'Saga'), ('長崎県', 'Nagasaki'), ('熊本県', 'Kumamoto'), ('大分県', 'Oita'), ('宮崎県', 'Miyazaki'),
          ('鹿児島県', 'Kagoshima'), ('沖縄県', 'Okinawa')]
+# 都道府県の名前だけを書いたときの出発地（県庁所在地の玄関口の駅。PREFS と同じ並び）
+GATEWAYS = ['札幌駅', '青森駅', '盛岡駅', '仙台駅', '秋田駅', '山形駅', '福島駅', '水戸駅', '宇都宮駅', '前橋駅',
+            '大宮駅', '千葉駅', '東京駅', '横浜駅', '新潟駅', '富山駅', '金沢駅', '福井駅', '甲府駅', '長野駅',
+            '岐阜駅', '静岡駅', '名古屋駅', '津駅', '大津駅', '京都駅', '大阪駅', '三ノ宮駅', '奈良駅', '和歌山駅',
+            '鳥取駅', '松江駅', '岡山駅', '広島駅', '山口駅', '徳島駅', '高松駅', '松山駅', '高知駅', '博多駅',
+            '佐賀駅', '長崎駅', '熊本駅', '大分駅', '宮崎駅', '鹿児島中央駅', '那覇空港駅']
 STATIONS = {('railway', 'station'), ('railway', 'halt'), ('railway', 'stop'), ('public_transport', 'station')}
 STATION_TAIL = re.compile(r'(駅|[Ss]tation|[Ss]ta\.?)$')
 
@@ -729,12 +769,38 @@ def pref_head(text):
     return 0, ''
 
 
+def pref_only(text):
+    """書いた文字が都道府県の名前だけ（「沖縄」「沖縄県」「Okinawa」「Okinawa Prefecture」。駅は付けない）なら、その都道府県の番号。違えば 0"""
+    t = re.sub(r'\s+', ' ', unicodedata.normalize('NFKC', str(text or '')).strip()).lower()
+    for i, (ja, en) in enumerate(PREFS, 1):
+        if t in (ja, ja if ja == '北海道' else ja[:-1], en.lower(), en.lower() + ' prefecture'):
+            return i
+    return 0
+
+
+def _is_gateway(x, pref):
+    """Nominatim の 1 件が、その都道府県の玄関口の駅（GATEWAYS）か"""
+    if not x or _pref_no(x) != pref or not (_is_station(x) or (x.get('category'), x.get('type')) == ('building', 'train_station')):
+        return False
+    nd = x.get('namedetails') if isinstance(x.get('namedetails'), dict) else {}
+    return _plain(GATEWAYS[pref - 1]) in (_plain(x.get('name')), _plain(nd.get('name:ja')), _plain(nd.get('name')))
+
+
+_MORE_NAMES = re.compile(r'\s*[;；].*$')
+_STATION_NOTE = re.compile(r'(?<=駅)\s*[(（][^()（）]*[)）]$')
+
+
+def _bare(name):
+    """名前から、続けて書かれた別の名前（「;丸の内中央口」）と、駅のあとの注記（「東京駅(改札外)」の「(改札外)」）を外す"""
+    return _STATION_NOTE.sub('', _MORE_NAMES.sub('', str(name or '').strip())).strip()
+
+
 def _found(x, lang):
     """Nominatim の 1 件 → {name, ja?, pref, city, lat, lng}。駅は名前に「駅」（英語は Station）を付ける"""
     nd = x.get('namedetails') if isinstance(x.get('namedetails'), dict) else {}
     addr = x.get('address') if isinstance(x.get('address'), dict) else {}
-    ja = str(nd.get('name:ja') or nd.get('name') or x.get('name') or '').strip()
-    name = str(nd.get('name:en') or x.get('name') or ja).strip() if lang == 'en' else ja
+    ja = _bare(nd.get('name:ja') or nd.get('name') or x.get('name') or '')
+    name = _bare(nd.get('name:en') or x.get('name') or ja) if lang == 'en' else ja
     if _is_station(x):
         if ja and not ja.endswith('駅'):
             ja += '駅'
@@ -754,7 +820,7 @@ def _found(x, lang):
 
 def find_key(lang, text):
     """出発地・到着地を引いた答えの作り置きの鍵（決め方を変えたら形を変え、前の決め方の答えを使わない）"""
-    return f'find3:{lang}:{text}'
+    return f'find5:{lang}:{text}'
 
 
 _NAME_JUNK = re.compile(r'[\s\W_]+')
@@ -814,8 +880,11 @@ def geocode(q, lang, cache):
     """駅・ホテル・地名を引く → {name, ja?, pref, city, lat, lng}。見つからなければ None、問い合わせに失敗したら GeoBusy。
     結果に駅があれば駅を選ぶ。地域（町・区）しか当たらないときは「〇〇駅」でも引き、駅があればそちらにする
     （「市ヶ谷」と書いた人は、たいてい市ヶ谷駅から出る）。
+    それでも駅が当たらなければ「市ヶ谷 駅」（空白をあけると、名前が「市ヶ谷」の駅だけを探す）でも引き、無ければ駅舎を選ぶ。
     「福岡駅」のように都道府県の名前の駅で、選んだ場所がその都道府県の外（富山県の福岡駅など）なら、その都道府県の中を先に探す
-    （「福岡市 福岡駅」の駅か駅舎、無ければ「福岡市」）。見つからなかったことも取っておく"""
+    （「福岡市 福岡駅」の駅か駅舎、無ければ「福岡市」）。
+    「沖縄」「北海道」のように都道府県の名前だけなら、県庁所在地の玄関口の駅（GATEWAYS。引けなければその市）にする。
+    見つからなかったことも取っておく"""
     text = unicodedata.normalize('NFKC', str(q or '')).strip()[:60]
     if not text:
         return None
@@ -834,15 +903,37 @@ def geocode(q, lang, cache):
         return got
     hits = look(text)
     pick = next((x for x in hits if _is_station(x)), None)
+    tries = []
     if not pick and not STATION_TAIL.search(text) and (not hits or hits[0].get('category') in ('place', 'boundary')):
-        pick = next((x for x in look(text + (' Station' if text.isascii() else '駅')) if _is_station(x)), None)
+        tries.append(text + (' Station' if text.isascii() else '駅'))
+    name = STATION_TAIL.sub('', text).strip()
+    if not pick and name and not text.isascii() and (tries or STATION_TAIL.search(text)) and not pref_only(text):
+        tries.append(name + ' 駅')
+    for t in tries:
+        pick = next((x for x in look(t) if _is_station(x)), None)
+        if pick:
+            break
+    pick = pick or next((x for x in hits if (x.get('category'), x.get('type')) == ('building', 'train_station')), None)
     pick = pick or (hits[0] if hits else None)
+    busy = False
+    gate = pref_only(text)
+    if gate and not _is_gateway(pick, gate):
+        for t in (GATEWAYS[gate - 1], STATION_TAIL.sub('', GATEWAYS[gate - 1])):
+            try:
+                door = geocode(t, lang, cache)
+            except GeoBusy:
+                if not pick:
+                    raise
+                busy = True
+                break
+            if door and pref_only(door.get('pref')) == gate:
+                cache[key] = dict(door)
+                return dict(door)
     pref, rest = pref_named(text), ''
     if not pref:
         pref, rest = pref_head(text)
     if pick and not pref and _same_name_elsewhere(pick, hits):
         pick = None
-    busy = False
     if pref and (not pick or _pref_no(pick) != pref):
         ja = PREFS[pref - 1][0]
         short = ja if ja == '北海道' else ja[:-1]

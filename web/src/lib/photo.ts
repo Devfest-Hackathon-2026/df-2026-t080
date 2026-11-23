@@ -37,7 +37,8 @@ export function spotPhoto(s: Spot, info: PlaceInfo | null | undefined, failed = 
 
 export const licenseLabel = (license: string) => (license === 'Public domain' ? tr({ ja: 'パブリックドメイン', en: 'Public domain' }) : license)
 
-export const sourceLabel = (source: string) => (/^https:\/\/commons\.wikimedia\.org\//.test(source) ? 'Wikimedia Commons' : 'Wikipedia')
+export const sourceLabel = (source: string) =>
+  /^https:\/\/commons\.wikimedia\.org\//.test(source) ? 'Wikimedia Commons' : /^https:\/\/www\.flickr\.com\//.test(source) ? 'Flickr' : 'Wikipedia'
 
 // クリエイティブ・コモンズのライセンスの URL を https にし、画面の言語の説明のページ（deed.ja・deed.en）にする。ほかの URL はそのまま
 export function licenseLink(url: string): string {

@@ -64,6 +64,96 @@ class Budget(unittest.TestCase):
         self.assertTrue(all(gplaces._take('search') for _ in range(20)))
 
 
+class ListBudget(unittest.TestCase):
+    def setUp(self):
+        self.saved = (gplaces.PER_HOUR, gplaces.BULK_PER_HOUR, gplaces.PER_DAY, gplaces.BULK_PER_DAY,
+                      gplaces.LIST_PER_HOUR, gplaces.LIST_PER_DAY, dict(gplaces.COUNT), dict(gplaces.DENIED))
+        gplaces.PER_HOUR, gplaces.BULK_PER_HOUR, gplaces.PER_DAY, gplaces.BULK_PER_DAY = 6, 2, 0, 0
+        gplaces.LIST_PER_HOUR, gplaces.LIST_PER_DAY = 3, 5
+        gplaces._times.clear()
+        gplaces._list_times.clear()
+
+    def tearDown(self):
+        (gplaces.PER_HOUR, gplaces.BULK_PER_HOUR, gplaces.PER_DAY, gplaces.BULK_PER_DAY,
+         gplaces.LIST_PER_HOUR, gplaces.LIST_PER_DAY) = self.saved[:6]
+        gplaces.COUNT.update(self.saved[6])
+        gplaces.DENIED.update(self.saved[7])
+        gplaces._times.clear()
+        gplaces._list_times.clear()
+
+    def test_list_has_its_own_hour_and_does_not_use_the_viewing_share(self):
+        got = [gplaces._take_list(k) for k in ('thumb', 'thumb_photo', 'thumb', 'thumb_photo')]
+        self.assertEqual(got, [True, True, True, False])
+        self.assertEqual(gplaces._times, [])
+        self.assertTrue(all(gplaces._take(k) for k in ('details', 'photo') * 3))
+
+    def test_counts_and_refusals_by_kind(self):
+        before = dict(gplaces.COUNT), dict(gplaces.DENIED)
+        for _ in range(4):
+            gplaces._take_list('thumb')
+        self.assertEqual(gplaces.COUNT['thumb'] - before[0]['thumb'], 3)
+        self.assertEqual(gplaces.DENIED['thumb'] - before[1]['thumb'], 1)
+        self.assertEqual(gplaces.COUNT['details'], before[0]['details'])
+
+    def test_list_day_limit(self):
+        old = time.time() - 2 * 3600
+        gplaces._list_times[:] = [old] * 4
+        self.assertTrue(gplaces._take_list('thumb'))
+        self.assertFalse(gplaces._take_list('thumb'))
+        gplaces._list_times[:] = [time.time() - 90000] * 9
+        self.assertTrue(gplaces._take_list('thumb'))
+
+    def test_viewing_limit_stops_the_list_too(self):
+        self.assertTrue(all(gplaces._take('details') for _ in range(6)))
+        self.assertFalse(gplaces._take_list('thumb'))
+        self.assertEqual(gplaces._list_times, [])
+
+    def test_no_list_limit(self):
+        gplaces.LIST_PER_HOUR, gplaces.LIST_PER_DAY = 0, 0
+        self.assertTrue(all(gplaces._take_list('thumb_photo') for _ in range(20)))
+
+
+class Thumb(unittest.TestCase):
+    def setUp(self):
+        self.saved = gplaces._call
+        self.asked = []
+
+    def tearDown(self):
+        gplaces._call = self.saved
+
+    def fake(self, answer):
+        def call(kind, path, query=None, body=None, fields=''):
+            self.asked.append((kind, path, query, fields))
+            return answer
+        gplaces._call = call
+
+    def test_asks_only_for_photos_and_gives_the_first(self):
+        name = 'places/ChIJ' + 'a' * 20 + '/photos/' + 'b' * 40
+        self.fake({'photos': [{'name': 'bad name'},
+                              {'name': name, 'widthPx': 4000, 'heightPx': 3000,
+                               'authorAttributions': [{'displayName': '投稿者', 'uri': '//maps.google.com/maps/contrib/1'}, {'displayName': ''}]},
+                              {'name': name + 'c'}]})
+        got = gplaces.thumb('ChIJ' + 'a' * 20)
+        self.assertEqual(self.asked, [('thumb', 'places/ChIJ' + 'a' * 20, None, 'photos')])
+        self.assertEqual(got, {'photo': {'name': name, 'width': 4000, 'height': 3000,
+                                         'authors': [{'name': '投稿者', 'uri': 'https://maps.google.com/maps/contrib/1'}]}})
+
+    def test_no_photo_and_missing_place(self):
+        self.fake({})
+        self.assertEqual(gplaces.thumb('ChIJ' + 'a' * 20), {'photo': None})
+        self.fake(None)
+        self.assertIsNone(gplaces.thumb('ChIJ' + 'a' * 20))
+        self.assertIsNone(gplaces.thumb('../x'))
+        self.assertEqual(len(self.asked), 2)
+
+    def test_photo_from_the_list_is_counted_as_list(self):
+        self.fake({'photoUri': 'https://lh3.example.com/p'})
+        name = 'places/ChIJ' + 'a' * 20 + '/photos/' + 'b' * 40
+        self.assertEqual(gplaces.photo_uri(name, 960, 'thumb_photo'), 'https://lh3.example.com/p')
+        self.assertEqual(gplaces.photo_uri(name, 960), 'https://lh3.example.com/p')
+        self.assertEqual([k for k, *_ in self.asked], ['thumb_photo', 'photo'])
+
+
 class Locate(unittest.TestCase):
     def setUp(self):
         self.saved = (gplaces.PROJECT, gplaces.search, gplaces.location, dict(gplaces._known))
@@ -184,6 +274,46 @@ class NotSight(unittest.TestCase):
             gplaces._known.clear()
         self.assertTrue(plist[0].get('notSight'))
         self.assertNotIn('notSight', plist[1])
+
+
+class Closed(unittest.TestCase):
+    """臨時休業・閉業と分かった場所は、候補の印を付ける（希望に名前を書いた場所は外さない）"""
+
+    def locate(self, status, **extra):
+        saved = (gplaces.PROJECT, gplaces.search)
+        gplaces.PROJECT = 'test'
+        gplaces._known.clear()
+        gplaces.search = lambda q, c, r, kind='search': [{'id': 'G' + 'z' * 12, 'name': q.rsplit(' ', 1)[0], 'lat': 35.001, 'lng': 135.751,
+                                                          'types': ['observation_deck'], 'label': '', 'status': status}]
+        try:
+            plist = [spot('展望フロア', kind='sight', role='famous', **extra)]
+            gplaces.locate(plist, AREA)
+        finally:
+            gplaces.PROJECT, gplaces.search = saved
+            gplaces._known.clear()
+        return plist[0]
+
+    def test_temporarily_or_permanently_closed_is_marked(self):
+        self.assertTrue(self.locate('CLOSED_TEMPORARILY').get('closed'))
+        self.assertTrue(self.locate('CLOSED_PERMANENTLY').get('closed'))
+
+    def test_open_unknown_and_named_stay(self):
+        self.assertNotIn('closed', self.locate('OPERATIONAL'))
+        self.assertNotIn('closed', self.locate(''))
+        self.assertNotIn('closed', self.locate('FUTURE_OPENING'))
+        self.assertNotIn('closed', self.locate('CLOSED_TEMPORARILY', named=True))
+
+    def test_search_reads_business_status(self):
+        saved = gplaces._call
+        gplaces._call = lambda kind, path, body=None, fields=None, query=None: {'places': [
+            {'id': 'G' + 'a' * 12, 'location': {'latitude': 35.0, 'longitude': 135.75}, 'displayName': {'text': '展望フロア'}, 'businessStatus': 'CLOSED_TEMPORARILY'},
+            {'id': 'G' + 'b' * 12, 'location': {'latitude': 35.0, 'longitude': 135.75}, 'displayName': {'text': '庭園'}}]}
+        try:
+            hits = gplaces.search('展望フロア', (35.0, 135.75), 3000)
+        finally:
+            gplaces._call = saved
+        self.assertEqual([h['status'] for h in hits], ['CLOSED_TEMPORARILY', ''])
+        self.assertIn('places.businessStatus', gplaces.SEARCH_FIELDS)
 
 
 class GenericNamePart(unittest.TestCase):

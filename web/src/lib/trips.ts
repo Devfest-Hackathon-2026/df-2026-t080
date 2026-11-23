@@ -11,9 +11,10 @@ import type { Store } from './firestore'
 import { byLang, lang, type Lang } from './i18n'
 import { readTripOdai, writeTripOdai, ODAI_EVENT, type OdaiItem } from './odai'
 import { expireGoogleLocations } from './place'
-import { nameFound, stripFound } from './found'
-import { isSaved, onReplaceSaved, readSaved, writeSaved, type Saved } from './saved'
-import { notifyWhy, readTrip as readWhy, writeTrip as writeWhy, WHY_EVENT, type Why } from './why'
+import { nameFound } from './found'
+import { isSaved, onReplaceSaved, placeLists, readSaved, stripSaved, writeSaved, type Saved } from './saved'
+import { allDays, otherStops, stayTitle, tripDates } from './days'
+import { isEmpty, notifyWhy, readTrip as readWhy, writeTrip as writeWhy, WHY_EVENT, type Why } from './why'
 
 export type TripMeta = {
   id: string
@@ -87,10 +88,18 @@ function bindingFor(since: number, demo: boolean): Binding {
   return next
 }
 
-// 端末の今のプランの旅の id（プランが無いときは null）
+// 例のプランを開いて見ただけ（プランに手を入れず、理由もミッションも無い）。この旅は端末の棚にもクラウドにも残さない
+export function untouchedDemo(s: Saved): boolean {
+  if (!s.data.demo || s.edited) return false
+  const since = s.since ?? 0
+  const area = s.data.area.name
+  return !readWhy(area).items.some((w) => w.at >= since && !isEmpty(w)) && !readTripOdai(area).items.some((x) => x.at >= since)
+}
+
+// 端末の今のプランの旅の id（プランが無いとき・例のプランを見ただけのときは null）
 export function currentTripId(): string | null {
   const s = readSaved()
-  if (!s || s.example) return null
+  if (!s || s.example || untouchedDemo(s)) return null
   const b = readBinding()
   return b && b.since === (s.since ?? 0) ? b.id : null
 }
@@ -105,28 +114,28 @@ export function noteStops(n: number) {
 
 // Google で照合した位置を、照合の前の位置に戻す（place_id は残す）。検索で入れた場所の名前と営業時間を外す
 function forCloud(s: Saved): Saved {
-  const c = JSON.parse(JSON.stringify(s)) as Saved
+  const c = stripSaved(JSON.parse(JSON.stringify(s)) as Saved)
   delete c.example
-  expireGoogleLocations(c.data.places, Number.POSITIVE_INFINITY)
-  c.data.places = stripFound(c.data.places)
+  for (const list of placeLists(c)) expireGoogleLocations(list, Number.POSITIVE_INFINITY)
   return c
 }
 
-// 端末の今の状態を、旅の形にする（プランが無いときは null）
+// 端末の今の状態を、旅の形にする（プランが無いとき・例のプランを見ただけのときは null）
 export function tripFromDevice(): Trip | null {
   const saved = readSaved()
-  if (!saved || saved.example) return null
+  if (!saved || saved.example || untouchedDemo(saved)) return null
   const since = saved.since ?? 0
   const b = bindingFor(since, !!saved.data.demo)
   const area = saved.data.area.name
+  const first = allDays(saved)[0]
   return {
     id: b.id,
-    title: (b.title ?? tripTitle(saved.data, saved.areaText)).slice(0, LIMITS.title),
+    title: (b.title ?? stayTitle(saved) ?? tripTitle(first.data, first.areaText)).slice(0, LIMITS.title),
     area: area.slice(0, LIMITS.area),
-    date: saved.date,
+    date: first.date,
     createdAt: b.createdAt,
     updatedAt: Date.now(),
-    stops,
+    stops: stops + otherStops(saved),
     lang,
     since,
     saved: forCloud(saved),
@@ -157,7 +166,7 @@ export function tripToDevice(t: Trip): boolean {
     return photo ? { ...x, photo } : { ...x }
   })
   writeTripOdai(area, { items: [...kept, ...mine].sort((a, b) => a.at - b.at) })
-  stops = t.stops
+  stops = Math.max(0, t.stops - otherStops(saved))
   const b: Binding = { id: t.id, since: t.since, createdAt: t.createdAt, title: t.title, uid: authState().user?.uid }
   writeBinding(b)
   const now = tripFromDevice()
@@ -204,14 +213,11 @@ function writeShelf(list: Trip[]) {
   window.dispatchEvent(new Event(SHELF_EVENT))
 }
 
-// 端末の今の旅を棚へ移す（別の旅に置き換わる前に、saved.ts から呼ばれる）。
-// 次も例のプランなら、今の例のプランと棚の例のプランは移さずに外す（例のプランは 1 件だけ）
-function shelveCurrent(next: Saved) {
+// 端末の今の旅を棚へ移す（別の旅に置き換わる前に、saved.ts から呼ばれる）。例のプランを見ただけの旅は移さない。
+// 手を入れた例のプランは、どれも同じ id なので、棚には 1 件だけ残る
+function shelveCurrent() {
   const t = tripFromDevice()
-  const demo = !!next.data.demo
-  const rest = readShelf().filter((x) => x.id !== t?.id && !(demo && x.id === DEMO_ID))
-  if (t && !(demo && t.id === DEMO_ID)) writeShelf([t, ...rest])
-  else if (rest.length !== readShelf().length) writeShelf(rest)
+  if (t) writeShelf([t, ...readShelf().filter((x) => x.id !== t.id)])
 }
 onReplaceSaved(shelveCurrent)
 
@@ -220,9 +226,11 @@ export function removeFromShelf(id: string) {
   if (list.some((t) => t.id === id)) writeShelf(list.filter((t) => t.id !== id))
 }
 
-// React の画面用。棚の旅の一覧（中身は含めない）
-export function useShelf(): TripMeta[] {
-  const metas = () => readShelf().map(({ id, title, area, date, createdAt, updatedAt, stops, lang: l }) => ({ id, title, area, date, createdAt, updatedAt, stops, lang: l }))
+// React の画面用。棚の旅の一覧（中身は含めない。dates: 何日かある旅の全日の日付）
+export type ShelfMeta = TripMeta & { dates?: string[] }
+export function useShelf(): ShelfMeta[] {
+  const metas = () =>
+    readShelf().map(({ id, title, area, date, createdAt, updatedAt, stops, lang: l, saved }) => ({ id, title, area, date, createdAt, updatedAt, stops, lang: l, ...(saved.days && saved.days.length > 1 && { dates: tripDates(saved) }) }))
   const [list, setList] = useState(metas)
   useEffect(() => {
     const f = () => setList(metas())
@@ -247,6 +255,11 @@ export function openTrip(t: Trip): boolean {
   }
   window.dispatchEvent(new Event(OPEN_EVENT))
   return true
+}
+
+// 端末の今の旅を、画面ごと開き直す（何日かある旅で、開く日を替えたあと）
+export function reopenCurrent() {
+  window.dispatchEvent(new Event(OPEN_EVENT))
 }
 
 // 新しい旅を作り始める（入力の画面を開く。プランを作ると、新しい旅として保存する）
@@ -302,8 +315,10 @@ function tripOf(id: string, d: Record<string, unknown>): Trip | null {
     const why = JSON.parse(String(d.why ?? '[]')) as unknown
     const odai = JSON.parse(String(d.odai ?? '[]')) as unknown
     if (!isSaved(saved) || !Array.isArray(why) || !Array.isArray(odai)) return null
-    expireGoogleLocations(saved.data.places)
-    nameFound(saved.data.places)
+    for (const list of placeLists(saved)) {
+      expireGoogleLocations(list)
+      nameFound(list)
+    }
     return { ...metaOf(id, d), since: num(d.since), saved, why: why as Why[], odai: odai as CloudOdai[] }
   } catch {
     return null

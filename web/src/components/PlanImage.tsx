@@ -12,9 +12,9 @@ import { tr } from '../lib/i18n'
 const T = tr({
   ja: {
     title: 'プランの画像',
-    failed: '画像を作れませんでした',
+    failed: '画像を作成できませんでした',
     alt: 'プランの地図とスケジュール',
-    making: '画像を作っています……',
+    making: '画像を作成しています……',
     save: '画像を保存・共有',
     shareTitle: (a: string) => `${a}のプラン`,
   },
@@ -31,6 +31,7 @@ const T = tr({
 // プランの地図とスケジュールを 1 枚の画像にして、保存・共有する（旅の振り返りカードと同じ保存の仕方）
 export function PlanImage({
   data,
+  name,
   date,
   plan,
   buses,
@@ -38,13 +39,15 @@ export function PlanImage({
   onNotice,
 }: {
   data: AreaData
+  // 画像と保存の名前に使う題（無ければエリアの名前）
+  name?: string
   date: string
   plan: Plan
   buses: (BusTrip | undefined)[]
   onClose: () => void
   onNotice: (text: string) => void
 }) {
-  const area = data.area.name
+  const area = name ?? data.area.name
   const [url, setUrl] = useState('')
   const blob = useRef<Blob | null>(null)
 

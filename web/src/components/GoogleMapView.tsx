@@ -6,7 +6,7 @@ import type { AreaBox } from '../lib/areaSearch'
 import { giveUpGoogleMaps, loadGoogleMaps, markMapsShown } from '../lib/gmaps'
 import { MapLayer, fitPad, keepOutOf, litOf, sheetCover, type Projector } from '../lib/mapLayer'
 import { mapLand, mapStyle } from '../lib/mapStyle'
-import { lineEdge } from '../lib/lineColor'
+import { lineEdge, lineEdgeGrow } from '../lib/lineColor'
 import { laneGap, lanesOf, shiftLine } from '../lib/routeLanes'
 import { WALK_BACK, WALK_DOT, WALK_EDGE, WALK_STEP } from '../lib/walkDots'
 import { MapTools } from './MapTools'
@@ -26,7 +26,7 @@ const isDark = () => window.matchMedia('(prefers-color-scheme: dark)').matches
 const FIT_PAD = { top: 48, bottom: 44, left: 44, right: 64 }
 const FOCUS_PAD = { top: 56, left: 56, right: 76, bottom: 76 }
 
-export function GoogleMapView({ data, plan, focusId, candidates, candId = null, showId = null, legIdx = null, buses = NO_BUSES, picked = NO_PICKS, changed, onOpen, onCandidate, onLeg, onAreaSearch, areaBox, searching = false, found = NO_FOUND, foundId = null, onFound }: MapProps) {
+export function GoogleMapView({ data, plan, focusId, candidates, candId = null, showId = null, legIdx = null, buses = NO_BUSES, picked = NO_PICKS, changed, onOpen, onCandidate, onLeg, onAreaSearch, areaBox, searching = false, found = NO_FOUND, foundId = null, onFound, car }: MapProps) {
   const box = useRef<HTMLDivElement>(null)
   const map = useRef<google.maps.Map | null>(null)
   const overlay = useRef<google.maps.OverlayView | null>(null)
@@ -225,9 +225,9 @@ export function GoogleMapView({ data, plan, focusId, candidates, candId = null, 
       const isBack = s.idx === back
       const op = dim ? 0.2 : isBack && !lit.any ? 0.55 : 1
       const z = dim || isBack ? 1 : 3
-      const solid = (coords: LL[], color: string, edge: string) => {
+      const solid = (coords: LL[], color: string, edge: string, grow = 0) => {
         const path = at(coords)
-        add(coords, path, { strokeColor: edge, strokeOpacity: op, strokeWeight: isBack ? 6 : 7, zIndex: z })
+        add(coords, path, { strokeColor: edge, strokeOpacity: op, strokeWeight: (isBack ? 6 : 7) + grow, zIndex: z })
         add(coords, path, { strokeColor: color, strokeOpacity: op, strokeWeight: isBack ? 3 : 4, zIndex: z + 1 })
       }
       const icons = (zoom: number): google.maps.IconSequence[] => {
@@ -247,11 +247,11 @@ export function GoogleMapView({ data, plan, focusId, candidates, candId = null, 
       if (s.pieces) {
         for (const p of s.pieces) {
           if (p.kind === 'walk') dots(p.coords)
-          else solid(p.coords, p.color ?? tint, lineEdge(p.color ?? tint, dark, land))
+          else solid(p.coords, p.color ?? tint, lineEdge(p.color ?? tint, dark, land), lineEdgeGrow(p.color ?? tint, dark, land))
         }
       } else if (!s.exact) {
         add(s.coords, at(s.coords), { strokeOpacity: 0, zIndex: z, icons: [{ icon: { path: 'M 0,-1 0,1', strokeColor: tint, strokeOpacity: 0.45 * op, scale: 2 }, offset: '0', repeat: '8px' }] })
-      } else if (s.mode === 'transit') solid(s.coords, tint, land)
+      } else if (s.mode !== 'walk') solid(s.coords, tint, land)
       else dots(s.coords)
     })
   }
@@ -631,7 +631,7 @@ export function GoogleMapView({ data, plan, focusId, candidates, candId = null, 
       )}
       <div className="map-dock" style={dockStyle} data-hidden={dockHidden ? '' : undefined}>
         <div className="map-dock-row">
-          {hasPlan ? <MapLegend cands={candidates.length > 0} /> : <span />}
+          {hasPlan ? <MapLegend cands={candidates.length > 0} car={!!car} /> : <span />}
           <MapTools
             locating={locating}
             fitLabel={plan && plan.stops.length > 0 ? MAPW.fitPlan : MAPW.fitAll}

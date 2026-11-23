@@ -362,15 +362,18 @@ def get(port, path, who='203.0.113.1'):
 class PlacesPerClientTest(Served):
     def setUp(self):
         g = app.gplaces
-        self.saved = app.PLACES_RATE, g.enabled, g.details, g.photo_uri
+        self.saved = app.PLACES_RATE, app.LIST_RATE, g.enabled, g.details, g.photo_uri, g.thumb
         g.enabled = lambda: True
         g.details = lambda pid, lang='ja': {'rating': 4.0, 'count': 1, 'hours': [], 'mapsUri': '', 'photos': []}
-        g.photo_uri = lambda name, w: 'https://example.com/photo'
+        self.kinds = []
+        g.photo_uri = lambda name, w, kind='photo': self.kinds.append(kind) or 'https://example.com/photo'
+        g.thumb = lambda pid: {'photo': None} if pid != 'ChIJmissing00' else None
         app.PLACES_RATE = app.bus.Rate(3, 0)
+        app.LIST_RATE = app.bus.Rate(2, 0)
 
     def tearDown(self):
         g = app.gplaces
-        app.PLACES_RATE, g.enabled, g.details, g.photo_uri = self.saved
+        app.PLACES_RATE, app.LIST_RATE, g.enabled, g.details, g.photo_uri, g.thumb = self.saved
 
     def test_place_find_shares_the_per_client_limit(self):
         saved = app.gplaces.find
@@ -400,6 +403,39 @@ class PlacesPerClientTest(Served):
             os.environ.pop('ZT_PLACES_PER_CLIENT', None)
             if saved_env is not None:
                 os.environ['ZT_PLACES_PER_CLIENT'] = saved_env
+
+    def test_list_has_its_own_per_client_limit(self):
+        self.assertEqual(get(self.port, '/api/place-thumb/ChIJ0000000000'), (200, {'photo': None}))
+        self.assertEqual(get(self.port, '/api/place-photo?name=x&w=960&list=1')[0], 302)
+        self.assertEqual(get(self.port, '/api/place-thumb/ChIJ0000000001'), (503, {'error': 'unavailable'}))
+        self.assertEqual(get(self.port, '/api/place-photo?name=x&w=960&list=1'), (503, {'error': 'unavailable'}))
+        self.assertEqual(get(self.port, '/api/place/ChIJ0000000000')[0], 200)
+        self.assertEqual(get(self.port, '/api/place-photo?name=x&w=960')[0], 302)
+        self.assertEqual(self.kinds, ['thumb_photo', 'photo'])
+        self.assertEqual(get(self.port, '/api/place-thumb/ChIJ0000000001', who='203.0.113.9')[0], 200)
+        self.assertEqual(get(self.port, '/api/place-thumb/ChIJmissing00', who='203.0.113.9'), (404, {'error': 'notfound'}))
+
+    def test_list_answers_when_places_cannot_be_used(self):
+        def off(pid):
+            raise app.gplaces.Off('limit')
+        app.gplaces.thumb = off
+        self.assertEqual(get(self.port, '/api/place-thumb/ChIJ0000000000'), (503, {'error': 'unavailable'}))
+        app.gplaces.enabled = lambda: False
+        self.assertEqual(get(self.port, '/api/place-thumb/ChIJ0000000000'), (503, {'error': 'off'}))
+
+    def test_list_default_follows_the_list_hourly_limit(self):
+        saved_env, saved_hour = os.environ.pop('ZT_PLACES_LIST_PER_CLIENT', None), app.gplaces.LIST_PER_HOUR
+        try:
+            for hour, want in ((150, 75), (12, 10), (0, 60)):
+                app.gplaces.LIST_PER_HOUR = hour
+                self.assertEqual(app.list_per_client(), want, hour)
+            os.environ['ZT_PLACES_LIST_PER_CLIENT'] = '4'
+            self.assertEqual(app.list_per_client(), 4)
+        finally:
+            app.gplaces.LIST_PER_HOUR = saved_hour
+            os.environ.pop('ZT_PLACES_LIST_PER_CLIENT', None)
+            if saved_env is not None:
+                os.environ['ZT_PLACES_LIST_PER_CLIENT'] = saved_env
 
     def test_details_and_photos_share_the_per_client_limit(self):
         self.assertEqual(get(self.port, '/api/place/ChIJ0000000000')[0], 200)
@@ -794,7 +830,7 @@ class HeadTest(GzipTest):
                 self.assertEqual(h_h.get(k), h_g.get(k), (path, k))
 
     def test_head_does_not_call_out(self):
-        for path in ('/api/place/ChIJ0000000000', '/api/place-photo?name=x', '/api/bus-info', '/api/jobs/x'):
+        for path in ('/api/place/ChIJ0000000000', '/api/place-thumb/ChIJ0000000000', '/api/place-photo?name=x', '/api/bus-info', '/api/jobs/x'):
             top, _, body = self.raw(path, method='HEAD')
             self.assertEqual((top.split(' ')[1], body), ('405', b''), path)
 

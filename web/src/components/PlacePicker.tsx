@@ -21,12 +21,12 @@ const T = tr({
   ja: {
     tabs: [
       { key: 'sight', label: '見どころ', note: '' },
-      { key: 'food', label: '食事', note: '昼食と夕食は1か所ずつです。選ぶと入れ替わります。' },
-      { key: 'cafe', label: 'カフェ', note: 'カフェは1か所です。選ぶと入れ替わります。' },
+      { key: 'food', label: '食事', note: '昼食と夕食は1か所ずつです。別の店を選択すると入れ替わります。' },
+      { key: 'cafe', label: 'カフェ', note: 'カフェは1か所です。別の店を選択すると入れ替わります。' },
     ] as { key: Tab; label: string; note: string }[],
     other: 'その他',
     fresh: '新しい候補',
-    title: '場所を足す・外す',
+    title: '場所を追加・削除',
     lead: '混雑を避けた時間にプランへ追加します。',
     kind: '種類',
     skipped: '（回らない地区）',

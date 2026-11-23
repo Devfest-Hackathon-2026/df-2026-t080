@@ -7,15 +7,15 @@ import { tr } from '../lib/i18n'
 
 const T = tr({
   ja: {
-    nowTitle: 'いまの予定',
-    now: 'いま',
+    nowTitle: '現在の予定',
+    now: '現在',
     leave: (t: ReactNode) => <>{t}に出発</>,
     left: (d: string) => `あと${d}`,
     then: (name: string) => `次は${name}`,
     nextTitle: '次の予定',
     next: '次',
-    arrive: (t: ReactNode) => <>{t}に着く予定</>,
-    moving: 'いま移動中',
+    arrive: (t: ReactNode) => <>{t}に到着予定</>,
+    moving: '移動中',
     maps: 'Google マップで経路を開く',
   },
   en: {

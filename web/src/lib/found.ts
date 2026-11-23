@@ -9,7 +9,7 @@ import type { PlaceInfo } from './place'
 import { ROLE_TEXT, type Stop } from './planner'
 
 const W = tr({
-  ja: { name: '検索で入れた場所', role: '自分で見つけた場所', noCrowd: '混雑の推定はありません' },
+  ja: { name: '検索から追加した場所', role: '自分で見つけた場所', noCrowd: '混雑の推定はありません' },
   en: { name: 'Place from search', role: 'Your find', noCrowd: 'No crowd estimate for this place' },
 })
 // 名前を聞き直せないとき（Google の地図を出していないときなど）の名前
@@ -65,7 +65,7 @@ export function spotOfFound(f: Found, area: AreaData['area'], date: string): Spo
   return withHours(base, f.hours, date)
 }
 
-// 取っておく形にする（検索で入れた場所の名前と営業時間を外す）。変える所が無ければ同じ配列を返す
+// 取っておく形にする（検索から追加した場所の名前と営業時間を外す）。変える所が無ければ同じ配列を返す
 export function stripFound(places: Spot[]): Spot[] {
   if (!places.some(isFound)) return places
   return places.map((s) => {
@@ -80,7 +80,7 @@ export function nameFound(places: Spot[]) {
   for (const s of places) if (isFound(s) && !s.name) s.name = FOUND_NAME
 }
 
-// まだ Places から聞き直していない、検索で入れた場所（week が無い）
+// まだ Places から聞き直していない、検索から追加した場所（week が無い）
 export const needsRestore = (s: Spot) => isFound(s) && !!s.placeId && s.week === undefined
 
 // Places から聞き直した名前・位置・営業時間を戻す
@@ -90,7 +90,7 @@ export function restoreFound(s: Spot, info: PlaceInfo | null, date: string): Spo
   return withHours({ ...s, ...pos, name: info.name || s.name }, info.periods ?? null, date)
 }
 
-// 旅の日付が変わったら、検索で入れた場所の開く分と閉まる分を、その日の営業時間に合わせる。変わらなければ同じ data を返す
+// 旅の日付が変わったら、検索から追加した場所の開く分と閉まる分を、その日の営業時間に合わせる。変わらなければ同じ data を返す
 export function foundHoursOn(data: AreaData, date: string): AreaData {
   let changed = false
   const places = data.places.map((s) => {

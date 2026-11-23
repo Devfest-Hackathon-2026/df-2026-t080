@@ -28,7 +28,7 @@ PROMPT = '''あなたは旅行プランの調整係です。利用者の頼み�
 最初の希望: {wish}
 条件: {conds}
 外している地区: {skip}
-回り方の好み: 移動を少なくする（{move_less}）・混雑をもっと避ける（{calm}）
+回り方の好み: 移動を少なくする（{move_less}）・混雑をもっと避ける（{calm}）{car}
 
 いまのプラン（回る順）:
 {plan}
@@ -109,6 +109,7 @@ def build_prompt(body):
         start=_hm(body.get('start', 600)), end=_hm(body.get('end', 1080)), wish=str(body.get('wish') or 'なし')[:200],
         conds='・'.join(str(c) for c in (body.get('conds') or [])[:10]) or 'なし', skip='・'.join(str(d) for d in (body.get('skip') or [])[:10]) or 'なし',
         move_less='オン' if prefer.get('moveLess') is True else 'オフ', calm='オン' if prefer.get('calm') is True else 'オフ',
+        car='\n移動の手段: 徒歩と車（電車・バスは使わない）' if body.get('car') is True else '',
         plan='\n'.join(plan_lines) or '（まだ無い）', places='\n'.join(place_lines), tags='・'.join(TAGS),
         request=str(body.get('request') or '')[:200], max_ops=MAX_OPS)
     return text + '\n' + ENGLISH if lang_of(body) == 'en' else text

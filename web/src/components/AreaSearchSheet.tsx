@@ -14,22 +14,22 @@ import { Sheet } from './Sheet'
 const T = tr({
   ja: {
     title: 'この付近を検索',
-    lead: '地図に写っている範囲で探します',
-    label: '探す物',
+    lead: '表示中の範囲を検索します',
+    label: 'キーワード',
     placeholder: 'カフェ、ラーメン、お土産……',
     search: '検索',
     chips: [
       ['カフェ', 'カフェ'],
-      ['ごはん', 'レストラン'],
+      ['レストラン', 'レストラン'],
       ['甘味', '甘味処'],
       ['お土産', 'お土産'],
     ],
-    busy: 'この付近を探しています……',
+    busy: 'この付近を検索しています……',
     none: 'この範囲では見つかりませんでした。',
     wide: '範囲が広すぎます。地図を拡大してから、もう一度お試しください。',
     limit: '今は検索できません。しばらくしてから、もう一度お試しください。',
     unavailable: '検索できませんでした。もう一度お試しください。',
-    offline: 'サーバーにつながりません。通信を確かめて、もう一度お試しください。',
+    offline: 'サーバーに接続できませんでした。通信状況を確認して、もう一度お試しください。',
     rating: (r: number, c: number) => `評価 ${r.toFixed(1)}（${c.toLocaleString('ja-JP')}件）`,
     openAt: (t: string) => `${t} は営業中`,
     closedAt: (t: string) => `${t} は営業時間外`,
@@ -37,8 +37,8 @@ const T = tr({
     sep: '・',
     maps: 'Google マップで見る',
     candidate: '候補の画面を開く',
-    add: 'プランに入れる',
-    inPlan: 'プランに入っています',
+    add: 'プランに追加',
+    inPlan: 'プランに追加済み',
     loading: '詳しい情報を読み込んでいます……',
     credit: '検索: Google マップ',
   },
@@ -92,11 +92,11 @@ type Props = {
   onPick: (placeId: string | null) => void
   onCandidate: (spotId: string) => void
   onAdd: (spotId: string) => void
-  onAddFound: (f: Found) => void // 候補に無い場所を、新しい候補にしてプランに入れる
+  onAddFound: (f: Found) => void // 候補に無い場所を、新しい候補にしてプランに追加
   onClose: () => void
 }
 
-// 結果を押したときに開く、写真・評価・営業時間と、プランに入れるボタンと、Google マップ・候補の画面への道。
+// 結果を押したときに開く、写真・評価・営業時間と、プランに追加ボタンと、Google マップ・候補の画面への道。
 // 候補にある場所はその候補を入れ、候補に無い場所は新しい候補にして入れる（混雑の推定は無い）
 function FoundDetail({ f, date, spotId, inPlan, onCandidate, onAdd, onAddFound }: { f: Found; date: string; spotId: string | null; inPlan: boolean; onCandidate: (id: string) => void; onAdd: (id: string) => void; onAddFound: (f: Found) => void }) {
   const place = usePlaceById(f.id)

@@ -4,6 +4,7 @@ import type { AreaBox, Found } from '../lib/areaSearch'
 import { loggedFetch } from '../lib/apiLog'
 import type { AreaData, BusTrip, RailOpt, Spot, TransitRoute } from '../types'
 import type { Plan } from '../lib/planner'
+import type { Leg } from '../lib/geo'
 import { legPieces, type Piece } from '../lib/legPieces'
 import { tr } from '../lib/i18n'
 
@@ -30,18 +31,19 @@ export const MAPW = tr({
 
 export type LL = [number, number]
 // exact: 道に沿った線が届いたか（届くまでは薄い点線の直線）。pieces: 便か乗換を入れた区間の、歩く所と乗る所（無ければ 1 本の線）
-export type Seg = { mode: 'walk' | 'transit'; coords: LL[]; exact: boolean; idx: number; minutes: number; pieces: Piece[] | null }
+export type Seg = { mode: Leg['mode']; coords: LL[]; exact: boolean; idx: number; minutes: number; pieces: Piece[] | null }
 
 // 写真を選ぶ画面を閉じたときなどに、地図を描き直してもらう合図（TransitSheet から送る）
 export const REDRAW_EVENT = 'intentrip:map-redraw'
 export const askMapRedraw = () => window.dispatchEvent(new Event(REDRAW_EVENT))
 
 export const lineCache = new Map<string, LL[] | null>()
-export const legKey = (a: LL, b: LL, mode: string) => `${mode}:${a.join(',')}>${b.join(',')}`
+// 車の区間は、電車・バスの区間と同じ道の線（車の道）を使う
+export const legKey = (a: LL, b: LL, mode: string) => `${mode === 'car' ? 'transit' : mode}:${a.join(',')}>${b.join(',')}`
 // 道に沿った線が新しく届いた合図（スケジュールの区間の行が、徒歩の距離を出し直す）
 export const LINES_EVENT = 'intentrip:lines'
 
-type LineAsk = { a: LL; b: LL; mode: 'walk' | 'transit' }
+type LineAsk = { a: LL; b: LL; mode: Leg['mode'] }
 
 // 聞いている途中の区間（同じ区間を続けて聞かず、届くのを待つ）
 const flying = new Map<string, Promise<void>>()
@@ -64,7 +66,7 @@ function miss(k: string) {
 
 async function askLines(need: LineAsk[]): Promise<void> {
   try {
-    const body = JSON.stringify({ legs: need.map((l) => ({ a: l.a, b: l.b, mode: l.mode })) })
+    const body = JSON.stringify({ legs: need.map((l) => ({ a: l.a, b: l.b, mode: l.mode === 'walk' ? 'walk' : 'transit' })) })
     const r = await loggedFetch('/api/legs', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body, signal: AbortSignal.timeout(LINES_WAIT_MS) })
     if (!r.ok) throw new Error(String(r.status))
     const j = (await r.json()) as { lines: (LL[] | null)[] }
@@ -103,7 +105,7 @@ export async function fetchLines(legs: LineAsk[]): Promise<(LL[] | null)[]> {
   return keys.map((k) => lineCache.get(k) ?? null)
 }
 
-export type LegIn = { a: LL; b: LL; mode: 'walk' | 'transit'; minutes: number; real?: TransitRoute; rail?: RailOpt }
+export type LegIn = { a: LL; b: LL; mode: Leg['mode']; minutes: number; real?: TransitRoute; rail?: RailOpt }
 
 // 区間の線と、歩く所・乗る所の切れ端（found: その区間に見つけた便）
 export const toSeg = (l: LegIn, idx: number, found?: BusTrip | null): Seg => {
@@ -229,6 +231,8 @@ export type MapProps = {
   found?: Found[]
   foundId?: string | null
   onFound?: (id: string) => void
+  // 車で回る旅（凡例を徒歩と車にする）
+  car?: boolean
 }
 
 // 選んである候補・見つけた便が無いときの、いつも同じ空の並び

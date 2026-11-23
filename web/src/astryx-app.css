@@ -106,10 +106,6 @@
   font-weight: 700;
   line-height: 1;
 }
-.sheet .why-go {
-  margin-left: calc(-1 * var(--spacing-3));
-  color: var(--color-text-accent);
-}
 .alt-row {
   padding: 2px 0;
 }
@@ -168,9 +164,6 @@
   column-gap: 10px;
   text-align: left;
 }
-.penguin-head .penguin-close {
-  margin-left: auto;
-}
 
 /* 共有のメニュー: Astryx のメニューと同じ面と線 */
 .share-list {
@@ -201,13 +194,49 @@
   display: grid;
   grid-template-columns: 1fr 1fr;
 }
-.sheet .more > .astryx-collapsible-trigger {
+.sheet .more > .astryx-collapsible-trigger,
+.form-rows .more > .astryx-collapsible-trigger {
   min-height: var(--tap);
   font-size: var(--text-body-size);
   font-weight: 700;
 }
 .more-part {
   margin-top: 12px;
+}
+/* 「プランを変更」の行: 名前の右に今の値を出し、押すとその場で開く。行の間は細い線 */
+.adjust-rows .more + .more,
+.form-rows > * + * {
+  border-top: 1px solid var(--line);
+}
+.sheet .more .more-label,
+.form-rows .more .more-label {
+  display: flex;
+  flex: 1;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  min-width: 0;
+}
+.sheet .more .more-name,
+.form-rows .more .more-name {
+  flex: none;
+}
+.sheet .more .more-sum,
+.form-rows .more .more-sum {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--ink-2);
+  font-size: 15px;
+  font-weight: 400;
+  text-align: right;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.sheet .more .more-body,
+.form-rows .more .more-body {
+  display: grid;
+  gap: 12px;
+  padding: 4px 0 16px;
 }
 
 /* 便のシート: 便の札は Astryx の Card と同じ面・線・角。選んである便は浅葱の線 */
@@ -290,6 +319,8 @@
 :root {
   --panel: light-dark(#f1f1f1, #262626);
   --panel-in: light-dark(#ffffff, #333333);
+  --rail-end: light-dark(#858585, #8f8f8f);
+  --rail-walk: light-dark(#0c7582, #2b8f99);
 }
 
 /* 上の帯: 白い面に、下へ薄い影。題の左の浅葱の線はやめ、題を太く */
@@ -300,6 +331,17 @@
 .top-title {
   padding-left: 0;
   border-left: 0;
+}
+/* 字を大きくしてボタンが横を取ったときは、題を潰さず、右のボタンを下の段へ送る */
+.top {
+  flex-wrap: wrap;
+}
+.top-title {
+  flex: 1 1 6rem;
+  min-width: 6rem;
+}
+.top-actions {
+  margin-left: auto;
 }
 
 /* 最初の画面: 地図は低くし、見出しと候補を先に見せる */
@@ -462,9 +504,9 @@
 .pick-sub .sp-fit {
   color: var(--color-text-primary);
 }
-.pick-sub .sp-feat[data-short] {
-  -webkit-line-clamp: 1;
-  line-clamp: 1;
+.pick-sub .sp-feat {
+  font-size: 13px;
+  font-feature-settings: 'palt';
 }
 .pick-group .sp-more {
   margin: 2px 0 0;
@@ -569,58 +611,126 @@
   box-shadow: 0 -1px 0 var(--color-border);
 }
 
-/* プランの画面: 概要の札。主役はいちばん上の混雑の比べ（減った割合を 28px の浅葱）。その下に題と時刻（22px）、数の札（場所・滞在・移動）、日数は Badge */
+/* プランの画面: 概要。1 枚の札に、旅の題と時刻の行、線を挟んで混雑の比べ（主役は減った割合）。札の下に押せる 1 行 */
 .summary.astryx-card {
-  margin: 0 0 28px;
-  padding: 20px;
+  margin: 0 0 12px;
+  padding: 20px 16px 24px 20px;
   border: 0;
   border-radius: var(--radius-page);
   background: var(--panel);
 }
-.summary .hope {
-  gap: 8px;
+.sum-trip:not(:last-child) {
+  margin: 0 0 14px;
+  padding: 0;
+  border-bottom: 1px solid var(--line);
 }
-.summary .hope-days {
+.sum-trip .hope {
+  gap: 6px;
+}
+.sum-trip .hope-days {
   display: flex;
 }
-.summary .hope-text {
+.sum-trip .hope-text {
   font-size: 17px;
   font-weight: 700;
   line-height: 1.4;
 }
-.summary .sum-time {
-  margin: 12px 0 0;
+/* 時刻と場所の数の行。押すと時間の内訳のシート */
+.sum-time-row {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  min-height: var(--tap);
+  margin: 4px 0 0 -6px;
+  padding: 6px 8px 6px 6px;
+  border: 0;
+  border-radius: var(--radius-element);
+  background: transparent;
+  color: var(--ink);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.sum-time-row:hover {
+  background: var(--surface);
+}
+.sum-time-row .sum-time {
   font-size: 22px;
   font-weight: 700;
   line-height: 1.2;
   letter-spacing: 0.01em;
 }
-.summary .sum-stats {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(5.5em, 1fr));
+.sum-count {
+  font-size: 15px;
+  color: var(--ink-2);
+}
+.sum-time-row > :last-child {
+  align-self: center;
+  color: var(--ink-2);
+}
+/* 比べの札の下の、押せる 1 行（混雑を避けられる場所・帰る時刻までの空き） */
+.sum-link {
+  display: flex;
+  align-items: center;
   gap: 8px;
-  margin: 14px 0 4px;
+  width: 100%;
+  min-height: var(--tap);
+  margin: 0 0 4px;
+  padding: 8px 12px 8px 20px;
+  border: 0;
+  border-radius: var(--radius-element);
+  background: transparent;
+  color: var(--ink);
+  font: inherit;
+  font-size: 15px;
+  text-align: left;
+  cursor: pointer;
 }
-.summary .sum-stats:has(> div:nth-child(4)) {
+.sum-link:hover {
+  background: var(--panel);
+}
+.sum-link > :first-child {
+  flex: 1;
+  min-width: 0;
+}
+.sum-link > svg,
+.sum-link > [class*='astryx-'] {
+  color: var(--ink-2);
+}
+.sum-link .nw,
+.sum-note .nw {
+  white-space: nowrap;
+}
+.sum-link-do {
+  flex: none;
+  color: var(--route);
+  font-weight: 700;
+}
+.sum-note {
+  margin: 0 0 8px;
+  padding: 0 20px;
+  font-size: 13px;
+}
+.sum-stats {
+  display: grid;
   grid-template-columns: repeat(auto-fit, minmax(7.5em, 1fr));
+  gap: 8px;
+  margin: 4px 0 12px;
 }
-.summary .sum-stats > div {
+.sum-stats > div {
   padding: 10px 12px;
   border-radius: var(--radius-element);
-  background: var(--panel-in);
+  background: var(--panel);
 }
-.summary .sum-stats dt {
+.sum-stats dt {
   font-size: 13px;
   color: var(--color-text-secondary);
 }
-.summary .sum-stats dd {
+.sum-stats dd {
   margin: 2px 0 0;
   font-size: 15px;
   font-weight: 700;
   white-space: nowrap;
-}
-.summary > .note {
-  margin-top: 10px;
 }
 
 /* スケジュール: 見出しの右は線のボタン 2 つ。場所の札は白い面に影 low、区間は地の上の細い行 */
@@ -647,7 +757,14 @@
 .rt-stop .thumb {
   width: 64px;
   height: 64px;
-  border-radius: var(--radius-element);
+  margin-right: 9px;
+  border-radius: calc(var(--radius-container) - 9px);
+}
+@container plan-panel (max-width: 20em) {
+  .rt-stop .thumb {
+    width: 44px;
+    height: 44px;
+  }
 }
 
 /* 下の札: ペンギンの一言・服装・旅のミッションは淡い灰の面にまとめる */
@@ -656,6 +773,15 @@
   border: 0;
   border-radius: var(--radius-page);
   background: var(--panel);
+}
+.wear.astryx-card {
+  padding: 18px 16px 20px 20px;
+}
+.penguin.astryx-card {
+  padding-left: 20px;
+}
+.penguin.astryx-card:has(.penguin-toggle[aria-expanded='true']) {
+  padding-bottom: 22px;
 }
 section.odai {
   border: 0;
@@ -670,6 +796,7 @@ section.odai {
 .schedule .sec-head {
   flex-wrap: wrap;
   row-gap: 8px;
+  margin-bottom: 12px;
 }
 .schedule .sec-title {
   white-space: nowrap;
@@ -682,14 +809,14 @@ section.odai {
   border-radius: var(--radius-page);
   background: var(--panel);
 }
-/* 便の札: 影 low の白い面。選んである便は墨の枠。途中の停留所の開け閉めは墨の字 */
+/* 便の札: 影は付けず、細い枠で分ける。選んである便は墨の枠。途中の停留所の開け閉めは墨の字 */
 .bus-trip {
   border: 0;
-  box-shadow: var(--shadow-low);
+  box-shadow: inset 0 0 0 1px var(--color-border);
 }
 .bus-trip[data-on] {
   outline: 0;
-  box-shadow: inset 0 0 0 2px var(--color-accent), var(--shadow-low);
+  box-shadow: inset 0 0 0 2px var(--color-accent);
 }
 .tl-via-toggle,
 .bus-chosen {
@@ -706,15 +833,15 @@ section.odai {
   letter-spacing: -0.01em;
 }
 
-/* ホーム: 旅の札は、最初の場所の写真を上に大きく出す札（影 low・大きな角丸） */
+/* ホーム: 旅の札は、最初の場所の写真を上に大きく出す札（大きな角丸）。影は付けず、プランの画面の札と同じ淡い灰の面で分ける */
 .home-item {
   overflow: hidden;
   border: 0;
   border-radius: var(--radius-page);
-  box-shadow: var(--shadow-low);
+  background: var(--panel);
 }
 .home-item[data-now] {
-  box-shadow: inset 0 0 0 2px var(--color-accent), var(--shadow-low);
+  box-shadow: inset 0 0 0 2px var(--color-accent);
 }
 .home-open {
   grid-template-columns: minmax(0, 1fr) auto;
@@ -758,6 +885,25 @@ section.odai {
   padding: 16px;
   border-radius: var(--radius-page);
   background: var(--panel);
+}
+/* 入力の画面の札は、場所・希望と移動・日時の 3 つ。札の中の欄は、細い線で分ける */
+.form-body > .form-group {
+  display: grid;
+  gap: 16px;
+  padding: 16px;
+  border-radius: var(--radius-page);
+  background: var(--panel);
+}
+.form-group > * + * {
+  padding-top: 16px;
+  border-top: 1px solid var(--line);
+}
+/* 札の中の時刻の欄の角は、札の角から内側の余白を引いた値（入れ子の角）。「早めに帰ってもいい時刻」の欄も、隣の札の出発・帰る時刻と同じ角にする（#321） */
+.form-body > .when input,
+.form-body > .field input[type='time'],
+.form-group > .when input,
+.form-group > .field input[type='time'] {
+  border-radius: calc(var(--radius-page) - 16px);
 }
 .form-body .field label,
 .form-body .field .field-label {
@@ -850,17 +996,18 @@ section.odai {
 
 /* 保存の勧め・候補を探している間: 塊は淡い灰の面 */
 .save-nudge,
-.form-body .progress {
+.form-body .progress,
+.form-body .wait-spots {
   border: 0;
   border-radius: var(--radius-page);
   background: var(--panel);
 }
 .save-nudge {
-  padding: 16px;
+  padding: 20px;
 }
 .fav-ask {
-  margin: 12px 0 24px;
-  padding: 16px;
+  margin: 12px 0 0;
+  padding: 20px 20px 12px;
   border-radius: var(--radius-page);
   background: var(--panel);
 }
@@ -960,23 +1107,18 @@ select:not(:focus-visible) {
   }
 }
 
-/* スケジュールの区間は 1 行: 坂の線と言葉も、分と距離の右に並べる（入りきらないときだけ折り返す） */
-.rt-leg-head .rt-slope {
-  display: inline-flex;
-  margin-left: 8px;
-  vertical-align: middle;
-  white-space: nowrap;
-}
-
-/* スケジュールの時刻の列: Figtree の数字は幅があるので、「10:19」と番号の札の間を空け、札の左の枠との間も空ける（並べ替えのときは時刻を出さず、8px だけ空ける） */
+/* スケジュールの行の割り振り: 5 桁の時刻の左と写真の右は 10px（写真の上下と同じ）、時刻と番号の枠は 8px、番号の枠と名前は 12px、中身と写真は 8px（並べ替えのときは時刻を出さず、8px だけ空ける） */
 .rt-node {
-  grid-template-columns: 84px 38px minmax(0, 1fr) auto;
+  grid-template-columns: 72px 38px minmax(0, 1fr) auto;
 }
 .rt-leg {
-  grid-template-columns: 84px 38px minmax(0, 1fr);
+  grid-template-columns: 72px 38px minmax(0, 1fr);
 }
 .rt-time {
-  padding-right: 10px;
+  padding-right: 6px;
+}
+.rt-stop .rt-body {
+  padding-right: 8px;
 }
 .route[data-editing] .rt-node {
   grid-template-columns: 8px 38px minmax(0, 1fr) auto;
@@ -1002,8 +1144,16 @@ body:has(.route[data-editing]) > .map-float {
 .rt-node[data-in='walk'] > .rt-rail::before,
 .rt-node[data-out='walk'] > .rt-rail::after,
 .rt-leg[data-mode='walk'] > .rt-rail::before {
-  background: radial-gradient(circle, var(--route) 2.6px, transparent 3px) center / 6px 10px;
+  background: radial-gradient(circle, var(--rail-walk) 2.6px, transparent 3px) center / 6px 10px;
   background-repeat: no-repeat round;
+}
+/* 線の上の印（番号の枠・出発と到着の丸）には色を付けない。色は線だけに付ける（電車・バスは路線の色、徒歩は浅葱の点） */
+.rt-rail > .badge {
+  border: 2px solid var(--ink);
+  color: var(--ink);
+}
+.rt-terminal {
+  border-color: var(--rail-end);
 }
 .rt-node[data-in='walk'] > .rt-rail::before {
   top: 0;
@@ -1173,4 +1323,361 @@ body:has(.route[data-editing]) > .map-float {
 .fav-back {
   margin-top: 16px;
   min-height: var(--tap);
+}
+
+/* 何日かある旅: 地図の下の日の切り替えと、その下の次の日を検索している間の一言。変更のシートの日数と、次の日の追加 */
+.day-tabs {
+  margin: 0 0 12px;
+}
+.day-status .note {
+  margin: 0 0 12px;
+}
+.day-carry {
+  display: flex;
+  gap: 1em;
+  min-width: 0;
+  margin: 0 0 12px;
+  font-size: 13px;
+  color: var(--ink-2);
+}
+.day-carry-label {
+  flex: none;
+}
+.day-carry-names {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--ink);
+  text-overflow: ellipsis;
+  text-overflow: '……';
+  white-space: nowrap;
+}
+.trip-days .day-add {
+  margin-top: 12px;
+}
+/* 泊まる宿の欄（日数の塊の中、泊数の下） */
+.stay-field {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+  margin-top: 10px;
+}
+.trip-days .stay-field label.astryx-field-label {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--ink-2);
+}
+
+/* 泊まりの旅を 1 行の文から作る画面: 日帰りと泊まりの切り替え（一番上）・問いかけと入力の箱・旅のまとめ。塊は入力の画面と同じ淡い灰の面 */
+.trip-kind-note {
+  margin: -8px 0 0;
+}
+.talk-ask {
+  gap: 12px;
+}
+.talk-last {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--ink-3);
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  overflow-wrap: anywhere;
+}
+.talk-q {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+}
+.talk-q .penguin-mark {
+  flex: none;
+}
+.talk-q-text {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+.talk-title {
+  margin: 0;
+  font-size: 17px;
+  font-weight: 700;
+  line-height: 1.4;
+  color: var(--ink);
+  text-wrap: pretty;
+}
+.talk-hint {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--ink-2);
+  text-wrap: pretty;
+}
+.talk-row {
+  display: flex;
+  align-items: flex-end;
+  gap: 8px;
+}
+.talk-row .talk-text {
+  flex: 1;
+  min-width: 0;
+}
+.talk-row textarea {
+  font-size: 17px;
+  line-height: 1.45;
+  field-sizing: content;
+  min-height: calc(2lh + 18px);
+  max-height: calc(8lh + 18px);
+  resize: none;
+}
+.talk-row textarea::placeholder {
+  font-size: 15px;
+}
+.talk-row > .astryx-button {
+  flex: none;
+  min-height: var(--tap);
+}
+.talk-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-height: var(--tap);
+  margin: -4px 0 -8px;
+}
+.talk-foot-main {
+  flex: 1;
+  min-width: 0;
+}
+.talk-foot .note,
+.talk-foot .error {
+  margin: 0;
+}
+.talk-skip.astryx-button {
+  min-height: var(--tap);
+  margin-left: calc(-1 * var(--spacing-3));
+}
+.talk-sum {
+  gap: 0;
+  padding-top: 6px;
+  padding-bottom: 6px;
+}
+.talk-lines {
+  margin: 0;
+}
+.talk-line {
+  padding: 10px 0;
+  border-top: 1px solid var(--line);
+}
+.talk-line:first-child {
+  border-top: 0;
+}
+.talk-line[data-cont] {
+  padding-top: 0;
+  border-top: 0;
+}
+.talk-line dt {
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--ink-2);
+}
+.talk-line[data-cont] dt {
+  display: none;
+}
+.talk-line dd {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+  margin: 2px 0 0;
+}
+.talk-line[data-cont] dd {
+  margin-top: 0;
+}
+.talk-value {
+  font-size: 15px;
+  font-weight: 600;
+  line-height: 1.5;
+  color: var(--ink);
+  overflow-wrap: anywhere;
+}
+.talk-sub {
+  margin-right: 8px;
+  font-size: 13px;
+  font-weight: 400;
+  color: var(--ink-2);
+}
+.talk-note {
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--ink-2);
+}
+.talk-note.warn {
+  color: var(--heat-ink);
+}
+.talk-manual.astryx-button {
+  flex: none;
+  min-height: var(--tap);
+  margin-right: calc(-1 * var(--spacing-3));
+}
+/* 対話の画面は中身が短いので、候補を検索のボタンを画面の下に置く（中身が長くなれば、今までどおり下に貼り付く） */
+.form-body.talk-body {
+  display: flex;
+  flex-direction: column;
+  min-height: calc(100svh - 160px);
+}
+.talk-body > .submit {
+  margin-top: auto;
+}
+.talk-foot .error,
+.talk-note {
+  font-size: 13px;
+  line-height: 1.5;
+  word-break: auto-phrase;
+  text-wrap: pretty;
+}
+
+/* 車で回るかのスイッチ（入力の画面とプランを変更のシート） */
+.car-field {
+  display: flex;
+  align-items: center;
+  min-height: var(--tap);
+}
+.car-field > * {
+  flex: 1;
+}
+.panel-sec .car-field {
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid var(--line);
+}
+
+/* 候補の画面の見出しの下: 種類と地区、混雑する時間帯（ペンギンの印）を 1 行ずつ */
+.sheet-heading .cand-lead {
+  display: block;
+}
+.sheet-heading .cand-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 2px 8px;
+}
+.sheet-heading .cand-meta .gplace-rating {
+  gap: 4px;
+  color: var(--color-text-primary);
+}
+.sheet-heading .cand-meta .star,
+.sheet-heading .cand-meta .star svg {
+  width: 13px;
+  height: 13px;
+}
+.sheet-heading .cand-peak {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 4px;
+  color: var(--color-text-primary);
+}
+/* 候補の画面の混雑: 写真・特徴と注意点・営業時間の下に、小さな見出しと低い棒で出す */
+.cand-crowd .sec-title {
+  font-size: 15px;
+}
+.cand-crowd .bars-read {
+  margin-bottom: 6px;
+  font-size: 13px;
+}
+.cand-crowd .bars-hint {
+  display: none;
+}
+.cand-crowd .bars-plot {
+  height: 40px;
+}
+
+/* 候補の一覧: 地区は場所の画面に出し、札には空いている時間帯と説明だけを出す。「追加」の字は出さず、写真を小さくして説明の幅を広げる */
+.sp-item .pick-row .thumb {
+  width: 56px;
+  height: 56px;
+}
+.pick-sub .sp-meta > .sp-district,
+.pick-sub .sp-meta > .sp-sep,
+.sp-item .sp-check-word {
+  display: none;
+}
+
+/* 候補の画面の写真は切らずに、もとの比率のまま全部見せる（縦長の写真は高さを抑えて左右を空ける） */
+.sheet:has(.cand-crowd) .hero img {
+  aspect-ratio: auto;
+  max-height: 320px;
+  object-fit: contain;
+}
+
+/* 候補の画面は、開いた高さで写真と特徴まで見せる（地図は隠れた分を避けて印を寄せる） */
+@media (max-width: 959px) {
+  .sheet-layer .sheet.card[data-size='peek']:has(.cand-crowd) {
+    max-height: min(64dvh, calc(100dvh - var(--toast-room, 0px) - env(safe-area-inset-top, 0px)));
+  }
+}
+.cand-facts + .gplace {
+  margin-top: 12px;
+}
+
+/* 切り口（グループ）どうしの間は、札と札の間（10px）よりはっきり広く空けて、線を引かずに区切る（#315） */
+.pick-group + .pick-group .sec-title {
+  margin-top: 32px;
+}
+
+/* 空いている時間帯の一言の頭の時計の印。字より薄い色にして、一言の頭の目印にする（#316） */
+.sp-quiet-icon {
+  display: inline-block;
+  margin-right: 4px;
+  vertical-align: -2px;
+  fill: none;
+  stroke: var(--color-text-secondary);
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+/* 切り替えの組の選択の印が動く時間を短くする（#317）。指で押したときは iOS と同じばねで約 0.7 秒動くが、下の中身はすぐ切り替わるので、印も約 0.2 秒で止める。
+   Astryx は、要素の --_astryx-motion-tempo を動きの時間に掛ける（1 が元の速さ。Astryx を上げたらこの名前が残っているかを確かめる） */
+.astryx-segmented-control {
+  --_astryx-motion-tempo: 0.3;
+}
+
+/* スケジュールの混雑の印は、いつも「種類・滞在」の下の行の左端に置く（#326）。
+   同じ行に続けると、種類と滞在の長さで印の横の位置が行ごとにずれる。下の行にすれば、どの行でも名前の左端と同じ縦の線にそろう */
+.rt-meta > .rt-crowd {
+  flex-basis: 100%;
+}
+
+/* ボタンの字の頭に付けるきらめきの印（「Gemini に頼む」。Gemini が作った文の頭の印と同じ形・#329） */
+.spark-icon {
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+/* #321: 「混雑を避けられる場所」などの行は上の札の続き。下のスケジュールの見出しとは離す（4px → 16px） */
+.sum-link ~ .schedule {
+  margin-top: 16px;
+}
+/* #321: 「旅を振り返る」は「旅のミッション」と同じ形の札。印は右向き（別の画面へ進む） */
+.recap-entry.odai {
+  margin-top: 12px;
+}
+.recap-open {
+  font-size: 17px;
+  font-weight: 700;
+  line-height: 1.3;
+}
+.recap-open::after {
+  margin: 0 6px 0 0;
+  transform: rotate(-45deg);
+}
+
+/* 地図のある画面（候補を選ぶ画面・プランの画面）では、2 本の指の開閉をページの拡大に使わない。
+   地図が低く、片方の指が地図の外に出やすいので、地図を拡大するつもりの操作でページが拡大されるのを防ぐ（1 本の指のスクロールは今までどおり） */
+.plan-view {
+  touch-action: pan-x pan-y;
 }

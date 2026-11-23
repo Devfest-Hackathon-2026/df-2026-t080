@@ -9,7 +9,10 @@ const T = tr({
     now: '今から',
     end: '帰る時刻',
     arrive: '到着',
+    leaveStay: '宿を出る時刻',
+    arriveStay: '宿に着く時刻',
     from: (n: string) => `${n}から出発し、${n}に戻ります。`,
+    toStay: (a: string, b: string) => `${a}から出発し、${b}に着きます。`,
     oneWay: (a: string, b: string) => `${a}から出発し、${b}まで行きます。`,
     fromCenter: 'エリアの中心の駅から出発し、同じ駅に戻ります。',
     leeway: '早めに帰ってもいい時刻',
@@ -18,7 +21,7 @@ const T = tr({
     leewayRangeArrive: (a: string, b: string) => `${a}〜${b}の間に着くプランにします。`,
     leewayNone: (t: string) => `帰る時刻（${t}）まで使うプランにします。`,
     leewayNoneArrive: (t: string) => `到着の時刻（${t}）まで使うプランにします。`,
-    past: '今日より前の日付は選べません。',
+    past: '今日より前の日付は選択できません。',
     after: (t: string) => `出発から1時間以上あけて、${t}以降にしてください。`,
     before: (t: string) => `${t}までにしてください。`,
     range: (a: string, b: string) => `${a}〜${b}にしてください。`,
@@ -30,7 +33,10 @@ const T = tr({
     now: 'Now',
     end: 'Back by',
     arrive: 'Arrive',
+    leaveStay: 'Leave Lodging',
+    arriveStay: 'Arrive at Lodging',
     from: (n: string) => `Start and end at ${n}.`,
+    toStay: (a: string, b: string) => `Start at ${a} and end at ${b}.`,
     oneWay: (a: string, b: string) => `Start at ${a} and end at ${b}.`,
     fromCenter: 'Start and end at the main station of the area.',
     leeway: 'Earliest okay to be back',
@@ -73,6 +79,9 @@ type Props = {
   endName?: string | null
   // 出発地に戻らない旅（最後の時刻を「到着」と呼ぶ）
   oneWay?: boolean
+  // 出発地・到着地が泊まる宿か（最初と最後の時刻を「宿を出る時刻」「宿に着く時刻」と呼ぶ）
+  stayFrom?: boolean
+  stayTo?: boolean
   // 欄ごとの、反映できない日付・時刻が入っているか（id と、入っていれば true）
   onInvalid?: Invalid
 }
@@ -88,7 +97,7 @@ function useInvalid(id: string, bad: boolean, onInvalid?: Invalid) {
 }
 
 // 日付・出発・戻り（片道は到着）。戻りの欄に出る時刻と、プランに使う時刻はいつも同じにする
-export function TimeRows({ date, start, end, onDate, onStart, onEnd, idPrefix, startName, endName, oneWay, onInvalid }: Props) {
+export function TimeRows({ date, start, end, onDate, onStart, onEnd, idPrefix, startName, endName, oneWay, stayFrom, stayTo, onInvalid }: Props) {
   // 出発に合わせて戻りの時刻を動かしたときの、動かした先の時刻
   const [moved, setMoved] = useState<number | null>(null)
   const setStart = (v: number) => {
@@ -117,7 +126,7 @@ export function TimeRows({ date, start, end, onDate, onStart, onEnd, idPrefix, s
         <DateField id={`${idPrefix}-date`} value={date} onDate={onDate} onInvalid={onInvalid} />
       </div>
       <div className="field">
-        <label htmlFor={`${idPrefix}-start`}>{T.start}</label>
+        <label htmlFor={`${idPrefix}-start`}>{stayFrom ? T.leaveStay : T.start}</label>
         <TimeField id={`${idPrefix}-start`} name="start" value={start} min={START_MIN} max={START_MAX} onCommit={setStart} early={T.range(hhmm(START_MIN), hhmm(START_MAX))} late={T.range(hhmm(START_MIN), hhmm(START_MAX))} onInvalid={onInvalid} />
         {today && (
           <button type="button" className="btn-quiet now-btn" onClick={fromNow}>
@@ -126,7 +135,7 @@ export function TimeRows({ date, start, end, onDate, onStart, onEnd, idPrefix, s
         )}
       </div>
       <div className="field">
-        <label htmlFor={`${idPrefix}-end`}>{oneWay ? T.arrive : T.end}</label>
+        <label htmlFor={`${idPrefix}-end`}>{stayTo ? T.arriveStay : oneWay ? T.arrive : T.end}</label>
         <TimeField
           id={`${idPrefix}-end`}
           name="end"
@@ -141,7 +150,7 @@ export function TimeRows({ date, start, end, onDate, onStart, onEnd, idPrefix, s
         />
       </div>
       {startName !== undefined && (
-        <p className="note when-note">{startName ? (endName ? T.oneWay(startName, endName) : T.from(startName)) : T.fromCenter}</p>
+        <p className="note when-note">{startName ? (endName ? (stayTo ? T.toStay : T.oneWay)(startName, endName) : T.from(startName)) : T.fromCenter}</p>
       )}
     </div>
   )

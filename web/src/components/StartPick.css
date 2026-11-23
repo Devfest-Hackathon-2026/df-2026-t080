@@ -97,18 +97,32 @@
   min-height: 52px;
   padding: 0 8px;
 }
-.sp-sum {
+/* 選んだ数と名前（見出しの帯のすぐ下に、一覧に重ねて出す細い帯。出しても一覧の位置は動かさない） */
+.sp-picked {
+  position: absolute;
+  top: 100%;
+  right: 0;
+  left: 0;
   display: flex;
   align-items: baseline;
   gap: 10px;
-  min-width: 0;
+  margin: 0;
+  padding: 6px max(16px, env(safe-area-inset-right, 0px)) 6px max(16px, env(safe-area-inset-left, 0px));
+  border-bottom: 1px solid var(--line);
+  background: var(--panel);
+  font-size: 13px;
+  line-height: 1.4;
+}
+.sp-picked[hidden] {
+  display: none;
+}
+.sp-picked .num {
+  flex: none;
+  font-weight: 700;
+}
+.sp-over {
   margin: 0;
   font-size: 13px;
-}
-.sp-sum .num {
-  flex: none;
-  font-size: 17px;
-  font-weight: 700;
 }
 .sp-names {
   min-width: 0;

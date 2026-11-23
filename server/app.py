@@ -7,14 +7,17 @@
 #                          出発地と到着地が離れすぎていたら 400 {error: 'far'}）
 #   GET  /api/geocode      ?q=<駅・ホテル・地名>&lang= → 地図のデータ（Nominatim・日本の中）で引いた {name, ja?, pref, city, lat, lng}
 #                          （見つからなければ 404・問い合わせられなければ 503。同じ文字は作り置きから）
-#   GET  /api/jobs/<id>    仕事の進み具合（steps）と結果。?after=<tag> を付けると、進むまで最大 20 秒待ってから返す
+#   GET  /api/jobs/<id>    仕事の進み具合（steps）と結果。?after=<tag> を付けると、進むまで最大 20 秒待ってから返す。
+#                          Gemini に頼んでいる間は、待ち画面に出すエリアの見どころとお店（preview。preview.py）も返す
 #   GET  /api/sample       最初に見せる例（sample.json。ほかの人が作ったプランは見せない）
 #   GET  /api/areas        候補を取ってあるエリア（すぐに作れる）と、その出発地（{areas: [名前], starts: {名前: {name, ja?, lat, lng}}}）
 #   POST /api/adjust       プランへの頼み → 画面ができる操作（{reply, ops}）
 #   POST /api/odai         場所に合わせた旅のお題を 1 つ（{text}）
+#   POST /api/trip-ask     {text, summary, lang, today} → 泊まりの旅の 1 行の文を読み取った、まとめへの差分（{diff}。tripask.py）
 #   POST /api/penguin      {lang, facts} → プランに合わせた、その日に役立つ注意を 3〜5 行（{lines}。同じ資料の答えは作り置きから返す）
 #   GET  /api/place/<id>   Places の名前・位置・評価・営業時間・写真 3 枚（取っておかずにそのまま返す。Places を使えないときは 503）
-#   GET  /api/place-photo  ?name=<写真の名前>&w=<幅> → Places の写真へ飛ばす（302）
+#   GET  /api/place-thumb/<id>  一覧の小さな写真用に、Places の写真の 1 枚目だけ（{photo}。無ければ null。枠は一覧の分。使えないときは 503）
+#   GET  /api/place-photo  ?name=<写真の名前>&w=<幅> → Places の写真へ飛ばす（302）。&list=1 は一覧の小さな写真から頼まれた写真（枠は一覧の分）
 #   POST /api/area-search  {q, box: [南, 西, 北, 東], lang} → 地図に写っている範囲の中を Places で探す（取っておかずにそのまま返す。
 #                          枠は照合と別。使えない・枠に届いたときは 503、範囲が広すぎるときは 400 の wide）
 #   POST /api/place-find   {place, area} → まだ照合していない候補を 1 か所だけ照合して {placeId}（無ければ null。使えないときは 503）
@@ -24,6 +27,7 @@
 #                          （エリアに関わる時刻表・OSM の路線をまだ取っていなければ取る。どれを使うかは bus_feeds.py・rail.py）
 #   POST /api/bus-table    {points, date, start, end, lang} → 点どうしの、乗換なしのバス・電車で戸口から戸口までの目安（分。便が無い組みは null）。
 #                          時刻表の無い組みは、OSM の路線から求めた乗換なしの電車の目安で埋め、rail に {opts, via} を付ける（rail.py）
+#                          （時刻表のあるエリアで路線を取っている途中なら、時刻表だけの表に railLoading を付ける）
 #   POST /api/matrix       {points: [[経度, 緯度]]} → 点どうしの移動の表（{matrix}。walk・drive は分、walkM は歩く道のりの m）
 #   POST /api/slope        {legs: [{a, b}]} → 2 点を歩く道の上り下り（elev.py。{up, down, steepUp, steepDown, m}・データが無ければ {}・
 #                          取れなかったら null）
@@ -38,7 +42,7 @@ from concurrent.futures import ThreadPoolExecutor
 from http.server import ThreadingHTTPServer, BaseHTTPRequestHandler
 from urllib.parse import parse_qs, urlparse
 
-import adjust, bus, elev, enrich, gplaces, odai, penguin, places, rail, transit, webconfig
+import adjust, bus, elev, enrich, gplaces, odai, penguin, places, preview, rail, transit, tripask, webconfig
 
 
 def load_llm():
@@ -147,7 +151,7 @@ except (OSError, ValueError):
 SAVE_LOCK = threading.Lock()
 _quota = {'at': 0.0, 'v': None}
 BUS = bus.Store(os.path.join(CACHE, 'bus'))
-RAIL = rail.Store(os.path.join(CACHE, 'rail'))
+RAIL = rail.Store(os.path.join(CACHE, 'rail'), seed_dir=rail.SEED_DIR)
 # 相手ごとの Gemini の 1 時間あたりの上限（既定は頼みの数 × 4）
 LLM_RATE = bus.Rate(int(os.environ.get('ZT_LLM_PER_CLIENT', str(4 * len(places.AREA_TASKS)))), 0)
 def places_per_client():
@@ -159,6 +163,17 @@ def places_per_client():
 
 
 PLACES_RATE = bus.Rate(places_per_client(), 0)
+
+
+def list_per_client():
+    """相手ごとの一覧の小さな写真の 1 時間あたりの上限。ZT_PLACES_LIST_PER_CLIENT が無ければ、一覧の 1 時間の上限の半分（最低 10。上限なしなら 60）"""
+    v = os.environ.get('ZT_PLACES_LIST_PER_CLIENT', '').strip()
+    if v:
+        return int(v)
+    return max(10, gplaces.LIST_PER_HOUR // 2) if gplaces.LIST_PER_HOUR > 0 else 60
+
+
+LIST_RATE = bus.Rate(list_per_client(), 0)
 
 
 def side_all_per_hour(name):
@@ -278,9 +293,10 @@ def load(path):
 
 
 def job_tag(job):
-    """仕事の今の様子の印。版・状態・進んだ数・各段の状態のどれかが変われば変わる"""
+    """仕事の今の様子の印。版・状態・進んだ数・各段の状態・待ち画面の場所の数のどれかが変われば変わる"""
     steps = ','.join(f"{st.get('key')}:{st.get('state')}" for st in list(job.get('steps') or []))
-    raw = f"{job.get('version', 0)}|{job.get('state')}|{job.get('done', 0)}|{steps}"
+    shown = len((job.get('preview') or {}).get('places') or [])
+    raw = f"{job.get('version', 0)}|{job.get('state')}|{job.get('done', 0)}|{steps}|{shown}"
     return hashlib.sha1(raw.encode()).hexdigest()[:12]
 
 
@@ -331,13 +347,13 @@ def note_put(k, lines, now=None):
             NOTES.pop(next(iter(NOTES)))
 
 
-def ask_task(task, area, wish, lang='ja', ctx=None):
+def ask_task(task, area, wish, lang='ja', ctx=None, car=False):
     last = None
     for _ in range(2):                  # 1 回だけやり直す
         t0 = time.time()
         try:
             with LATER_SEM if task in places.AFTER else LLM_SEM:
-                text = llm.ask(places.build_prompt(task, area, wish, lang, ctx), MODEL)
+                text = llm.ask(places.build_prompt(task, area, wish, lang, ctx, car), MODEL)
             r = places.parse_json(text)
             return places.label_themes(r, task, ctx, lang) if task in places.AFTER else r
         except Exception as e:  # noqa: BLE001
@@ -356,14 +372,14 @@ def set_step(job, k, state):
 def build_result(area_data, wish_data, area_text, wish, matrix=None, trip=None):
     # 写真・位置の係が場所の情報を書き換えている最中に、進み具合の返事で書き出しても落ちないように写しで返す。
     # 到着地（end）は、出発地に戻らない旅だけ。query の start・end は画面が送った出発地と到着地（同じ候補で探し直すときに送り返す）
-    ids = {p['id'] for p in wish_data['places']}
     return snap({
         'matrix': matrix,
         'area': places.reach_area(area_data['area'], wish_data['places']), 'start': area_data['start'], **({'end': area_data['end']} if area_data.get('end') else {}),
         'districts': area_data.get('districts') or [],
         **({'themes': area_data['themes']} if area_data.get('themes') else {}),
         'conditions': wish_data['conditions'],
-        'places': wish_data['places'] + [p for p in area_data['places'] if p['id'] not in ids],
+        **({'far': wish_data['far']} if wish_data.get('far') else {}),
+        'places': places.with_wish(wish_data['places'], area_data['places']),
         'query': {'area': area_text, 'wish': wish, **({'start': trip['start'], 'end': trip['end']} if trip else {})},
         'createdAt': int(time.time()),
     })
@@ -426,14 +442,16 @@ def sample_area(d):
     return ad
 
 
-def job_plan(area_text, wish, lang='ja', trip=None):
+def job_plan(area_text, wish, lang='ja', trip=None, car=False):
     """作り置きを読み、Gemini に頼む分を決める → (エリアの鍵, 希望の鍵, エリアの作り置き, 希望の作り置き, 頼む分)。
     旅（出発地と到着地）の頼みは、エリアの名前と 2 点の位置で鍵を作る。出発地に戻る旅で、その名前のエリアの作り置き
-    （出発地と到着地を入れる前の形）があり、作り置きの出発地が引いた出発地から 1 km 以内なら、それを使う"""
+    （出発地と到着地を入れる前の形）があり、作り置きの出発地が引いた出発地から 1 km 以内なら、それを使う。
+    車で回る旅（car）は、希望の名指しの場所を出す範囲が広いので、希望の作り置きを分ける（エリアの作り置きは同じ物を使う）"""
+    car_tail = ('car',) if car else ()
     sample = sample_trip(trip, lang)
     if sample:
         name = sample['query']['area']
-        akey, wkey = key_of('area', name, *lang_tail(lang)), key_of('wish', name, wish, *lang_tail(lang))
+        akey, wkey = key_of('area', name, *lang_tail(lang)), key_of('wish', name, wish, *lang_tail(lang), *car_tail)
         if not wish:
             wish_data = {'conditions': [], 'places': []}
         elif same_wish(wish, str(sample['query'].get('wish') or '')):
@@ -441,7 +459,7 @@ def job_plan(area_text, wish, lang='ja', trip=None):
         else:
             wish_data = load(path_of('wish', wkey))
         return akey, wkey, sample_area(sample), wish_data, [] if wish_data is not None else ['wish']
-    akey, wkey = key_of('area', area_text, *lang_tail(lang)), key_of('wish', area_text, wish, *lang_tail(lang))
+    akey, wkey = key_of('area', area_text, *lang_tail(lang)), key_of('wish', area_text, wish, *lang_tail(lang), *car_tail)
     if trip:
         tkey = key_of(*places.trip_key(trip), *lang_tail(lang))
         area_data = load(path_of('area', tkey))
@@ -451,7 +469,7 @@ def job_plan(area_text, wish, lang='ja', trip=None):
                 (places.num(was.get('lat')), places.num(was.get('lng'))), (trip['start']['lat'], trip['start']['lng'])) <= 1000:
             area_data = old
         else:
-            akey, wkey = tkey, key_of('wish', *places.trip_key(trip), wish, *lang_tail(lang))
+            akey, wkey = tkey, key_of('wish', *places.trip_key(trip), wish, *lang_tail(lang), *car_tail)
     else:
         area_data = load(path_of('area', akey))
     wish_data = load(path_of('wish', wkey)) if wish else {'conditions': [], 'places': []}
@@ -460,7 +478,7 @@ def job_plan(area_text, wish, lang='ja', trip=None):
 
 
 def prefetch_rail(ad):
-    """最初のプランを出すときに、時刻表の無いエリアなら、電車の路線を取り始める（別のスレッドで。待たない）。
+    """最初のプランを出すときに、電車の路線を取り始める（別のスレッドで。待たない）。
     候補を 2 km ほど広げた範囲で取り、あとから届く候補も同じ作り置きで足りるようにする"""
     pts = [(p['lat'], p['lng']) for p in [ad.get('start') or {}, *ad.get('places', [])] if isinstance(p.get('lat'), (int, float))]
     if not pts or not RAIL.enabled():
@@ -468,8 +486,6 @@ def prefetch_rail(ad):
 
     def go():
         try:
-            if BUS.feeds_for(bus.area_box(pts)):
-                return
             s, w = min(p[0] for p in pts) - 0.02, min(p[1] for p in pts) - 0.02
             n, e = max(p[0] for p in pts) + 0.02, max(p[1] for p in pts) + 0.02
             RAIL.get([(s, w), (n, e)])
@@ -509,12 +525,46 @@ def table_of(pts):
     return {**{x: v for x, v in m.items() if x != 'fixed'}, **({'heights': h} if h and len(h) == len(pts) else {})}
 
 
-def run_job(job, area_text, wish, lang='ja', trip=None):
+AREAS = {}                             # 作り置きの置き場 → その中のエリアの一覧（preview.Areas）
+
+
+def areas():
+    if CACHE not in AREAS:
+        AREAS[CACHE] = preview.Areas(CACHE)
+    return AREAS[CACHE]
+
+
+def first_preview(area_data, trip, lang):
+    """待ち画面に最初から出せる見どころとお店（Gemini も Places も呼ばない）。頼んだエリアの作り置きか、
+    出発地を範囲に含むほかの作り置き（例のプランを含む）から。無ければ None"""
+    try:
+        if area_data:
+            return preview.of_area(area_data, PHOTO)
+        if not trip:
+            return None
+        sample = preview.index_of(sample_of(lang) or {}, lang)
+        near = areas().near(trip['start']['lat'], trip['start']['lng'], lang, [sample] if sample else [])
+        return preview.of_area(near, PHOTO) if near else None
+    except Exception:  # noqa: BLE001
+        traceback.print_exc()
+        return None
+
+
+def answer_preview(cur, task, raw, area_text, lang):
+    """届いた頼みの答えのうち、待ち画面にまだ無い種類の場所を足す（足せなければ cur のまま。失敗しても候補集めは止めない）"""
+    try:
+        return preview.of_answer(cur, task, raw, area_text, lang, PHOTO)
+    except Exception:  # noqa: BLE001
+        traceback.print_exc()
+        return cur
+
+
+def run_job(job, area_text, wish, lang='ja', trip=None, car=False):
     """頼みを同時に投げ、人気スポット・飲食店・希望がそろったら先にプランを出す（state=ready）。
     残りの候補が届くたびに結果を差し替え、最後に位置を確かめて state=done。
     trip（出発地と到着地。places.trip_of）があるときは、頼みのエリアの所に旅の向きと 2 点の位置を書き足し、
-    エリアの中心と範囲・出発地・到着地を 2 点から決める"""
-    akey, wkey, area_data, wish_data, tasks = job_plan(area_text, wish, lang, trip)
+    エリアの中心と範囲・出発地・到着地を 2 点から決める。car: 車で回る旅（電車の路線を取りに行かない）"""
+    akey, wkey, area_data, wish_data, tasks = job_plan(area_text, wish, lang, trip, car)
     ask_area = places.trip_prompt_area(trip) if trip else area_text
     draft = bool(area_data and area_data.get('partial'))   # 2 段目の途中で取っておいたエリア（ほかの仕事が集めている途中）
     keys = list(dict.fromkeys(places.STEP.get(t, t) for t in tasks))
@@ -522,6 +572,8 @@ def run_job(job, area_text, wish, lang='ja', trip=None):
     raw, lock, changed = {}, threading.RLock(), threading.Event()
     limited = threading.Event()   # どれかの頼みが Gemini の 1 時間・1 日の上限で断られた
     tstate = {t: 'wait' for t in tasks}
+    if tasks:
+        job['preview'] = first_preview(area_data, trip, lang)
     try:
         if tasks and not quota_ok():
             raise RuntimeError('quota')
@@ -545,9 +597,11 @@ def run_job(job, area_text, wish, lang='ja', trip=None):
             mark(t, 'run')
             t1 = time.time()
             try:
-                r = ask_task(t, ask_area, wish, lang, ctx)
+                r = ask_task(t, ask_area, wish, lang, ctx, car)
                 with lock:
                     raw[t] = r
+                    if job.get('state') == 'running':
+                        job['preview'] = answer_preview(job.get('preview'), t, r, area_text, lang)
                 mark(t, 'done')
                 job['times'][t] = round(time.time() - t1)
             except Exception as e:  # noqa: BLE001
@@ -622,9 +676,10 @@ def run_job(job, area_text, wish, lang='ja', trip=None):
             wd = wish_data
             if wd is None:
                 w = got.get('wish') or {}
-                wd = {'conditions': places.clean_conditions(w, lang),
-                      'places': places.keep_named([p for p in (places.clean_place(x, 'wish', lang) for x in places.items(w.get('places')))
-                                                   if p and places.in_reach(p, ad['area'], (ad.get('start'), ad.get('end')))])}
+                wished = [p for p in (places.clean_place(x, 'wish', lang) for x in places.items(w.get('places'))) if p]
+                near = [p for p in wished if places.in_reach(p, ad['area'], (ad.get('start'), ad.get('end')), places.WISH_KM_CAR if car else places.WISH_KM)]
+                far = [p['name'] for p in wished if p.get('named') and p not in near][:places.NAMED_MAX]
+                wd = {'conditions': places.clean_conditions(w, lang), 'places': places.keep_named(near), **({'far': far} if far else {})}
             return ad, wd
 
         shown, drafted = 0, False
@@ -638,7 +693,7 @@ def run_job(job, area_text, wish, lang='ja', trip=None):
             if first_ready and len(have) > shown:
                 ad, wd = assemble()
                 if ad and len(ad['places']) >= 5:
-                    if not shown:
+                    if not shown and not car:
                         prefetch_rail(ad)
                     publish(job, build_result(ad, wd, area_text, wish, trip=trip), 'ready')
                     job['seconds'] = job.get('seconds') or round(time.time() - job['t0'])
@@ -674,8 +729,7 @@ def run_job(job, area_text, wish, lang='ja', trip=None):
         area_data, wish_data = ad, wd
 
         def all_places():
-            ids = {p['id'] for p in wish_data['places']}
-            return wish_data['places'] + [p for p in area_data['places'] if p['id'] not in ids]
+            return places.with_wish(wish_data['places'], area_data['places'])
 
         def mine():
             """この仕事で照合・確かめ・写真を付ける場所（集めている途中のエリアを読んだときは、希望の場所だけ）"""
@@ -684,9 +738,9 @@ def run_job(job, area_text, wish, lang='ja', trip=None):
         # Places で place_id と位置を照合する（位置の確かめの前に。場所ごとに 1 回だけ）
         gplaces.expire(mine())
         found = gplaces.locate(mine(), places.reach_area(area_data['area'], wish_data['places']))
-        # 照合で名所でない店（金券ショップ・コンビニ・事務所など）と分かった見どころは、候補から外す
-        area_data['places'] = [p for p in area_data['places'] if not p.get('notSight')]
-        wish_data['places'] = [p for p in wish_data['places'] if not p.get('notSight')]
+        # 照合で名所でない店（金券ショップ・コンビニ・事務所など）と分かった見どころと、臨時休業・閉業と分かった場所は、候補から外す
+        area_data['places'] = [p for p in area_data['places'] if not p.get('notSight') and not p.get('closed')]
+        wish_data['places'] = [p for p in wish_data['places'] if not p.get('notSight') and not p.get('closed')]
         if found['search'] or found['renew'] or found['known'] or found['left']:
             print(f"[places] {area_text!r}: 照合 {found['search']} 件・見つかった {found['found']} 件・"
                   f"位置の取り直し {found['renew']} 件・覚えていた {found['known']} 件・次に回した {found['left']} 件", flush=True)
@@ -762,6 +816,9 @@ def run_job(job, area_text, wish, lang='ja', trip=None):
             with GEO_LOCK:
                 GEO.update(geo)
                 save_json(GEO_PATH, GEO)
+            for p in todo:
+                if places.unfound(p):
+                    p['unfound'] = True
             set_step(job, 'verify', 'done')
         for t in th:
             t.join(90)
@@ -933,7 +990,9 @@ class H(BaseHTTPRequestHandler):
             end = time.time() + LONG_POLL
             while after and job['state'] in ('running', 'ready') and job_tag(job) == after and time.time() < end:
                 time.sleep(0.25)
-            out = snap({k: job.get(k) for k in ('id', 'state', 'version', 'steps', 'done', 'total', 'result', 'error', 'seconds', 'times')})
+            out = snap({k: job.get(k) for k in ('id', 'state', 'version', 'steps', 'done', 'total', 'result', 'error', 'seconds', 'times', 'preview')})
+            if out.get('state') != 'running':
+                out.pop('preview', None)     # 候補が届いたら、待ち画面の場所は要らない
             out['tag'] = job_tag(job)
             return self.send_json(200, out)
         lang = lang_of(parse_qs(urlparse(self.path).query).get('lang', [''])[0])
@@ -947,6 +1006,8 @@ class H(BaseHTTPRequestHandler):
             return self.geocode(parse_qs(urlparse(self.path).query), lang)
         if path.startswith('/api/place/'):
             return self.place(path[len('/api/place/'):], lang)
+        if path.startswith('/api/place-thumb/'):
+            return self.place_thumb(path[len('/api/place-thumb/'):])
         if path == '/api/place-photo':
             return self.place_photo(parse_qs(urlparse(self.path).query))
         if path == '/api/bus':
@@ -970,7 +1031,7 @@ class H(BaseHTTPRequestHandler):
 
     def do_POST(self):
         route = urlparse(self.path).path
-        if route not in ('/api/jobs', '/api/legs', '/api/matrix', '/api/slope', '/api/transit-shot', '/api/adjust', '/api/odai', '/api/penguin', '/api/bus-table', '/api/place-find', '/api/area-search'):
+        if route not in ('/api/jobs', '/api/legs', '/api/matrix', '/api/slope', '/api/transit-shot', '/api/adjust', '/api/odai', '/api/penguin', '/api/bus-table', '/api/place-find', '/api/area-search', '/api/trip-ask'):
             return self.send_json(404, {'error': 'notfound'})
         size = (self.headers.get('Content-Length') or '0').strip()
         if not (size.isascii() and size.isdigit()):
@@ -988,7 +1049,7 @@ class H(BaseHTTPRequestHandler):
             self.close_connection = True
             return None
         handler = {'/api/jobs': self.jobs, '/api/legs': self.legs, '/api/matrix': self.matrix, '/api/slope': self.slope, '/api/place-find': self.place_find, '/api/area-search': self.area_search,
-                   '/api/adjust': self.adjust, '/api/odai': self.odai, '/api/penguin': self.penguin_note, '/api/bus-table': self.bus_table}[route]
+                   '/api/adjust': self.adjust, '/api/odai': self.odai, '/api/penguin': self.penguin_note, '/api/bus-table': self.bus_table, '/api/trip-ask': self.trip_ask}[route]
         try:
             return handler(body)
         except ValueError:
@@ -998,6 +1059,7 @@ class H(BaseHTTPRequestHandler):
         area = norm(str(body.get('area') or ''))[:40]
         wish = norm(str(body.get('wish') or ''))[:200]
         lang = lang_of(body.get('lang'))
+        car = body.get('car') is True
         trip = None
         if body.get('start') is not None:
             start = places.trip_point(body.get('start'))
@@ -1010,22 +1072,22 @@ class H(BaseHTTPRequestHandler):
             area = trip['area']
         if not area:
             return self.send_json(400, {'error': 'area'})
-        k = key_of('job', *(places.trip_key(trip) if trip else (area,)), wish, *lang_tail(lang))
+        k = key_of('job', *(places.trip_key(trip) if trip else (area,)), wish, *lang_tail(lang), *(('car',) if car else ()))
         with JOBS_LOCK:
             prune_jobs()
             for j in JOBS.values():      # 同じ頼みが走っていればそれを返す
                 if j['key'] == k and j['state'] in ('running', 'ready'):
                     return self.send_json(200, snap({'id': j['id'], 'state': 'running', 'steps': j['steps']}))
-            tasks = job_plan(area, wish, lang, trip)[4]
+            tasks = job_plan(area, wish, lang, trip, car)[4]
             if tasks and (llm.room() < len(tasks) or not LLM_RATE.take(self.client(), n=len(tasks))):
                 return self.send_json(200, {'id': '', 'state': 'error', 'error': 'quota'})
             job_id = uuid.uuid4().hex[:12]
             JOBS[job_id] = job = {'id': job_id, 'key': k, 'state': 'running', 'steps': [], 'done': 0, 'total': 0,
                                   't0': time.time(), 'times': {}}
-        t = threading.Thread(target=run_job, args=(job, area, wish, lang, trip), daemon=True)
+        t = threading.Thread(target=run_job, args=(job, area, wish, lang, trip, car), daemon=True)
         t.start()
         t.join(0.5)                      # 取ってある分だけならすぐ終わる
-        self.send_json(200 if job['state'] != 'running' else 202, snap({k2: job.get(k2) for k2 in ('id', 'state', 'version', 'steps', 'result', 'error')}))
+        self.send_json(200 if job['state'] != 'running' else 202, snap({k2: job.get(k2) for k2 in ('id', 'state', 'version', 'steps', 'result', 'error', 'preview')}))
 
     def read_within(self, n, limit, keep=True):
         """本体の n バイトを、始めから limit 秒のうちに読む（keep=False なら読み捨てる）。
@@ -1108,6 +1170,29 @@ class H(BaseHTTPRequestHandler):
             return self.send_json(200, {'error': 'quota' if '枠' in str(e) else 'failed'})
         return self.send_json(200, out)
 
+    def trip_ask(self, body):
+        """泊まりの旅の 1 行の文を、旅のまとめへの差分に読み取る。{text, summary, lang, today} → {diff} か {error}。
+        回数は「Gemini に頼む」と同じく、相手ごとの LLM_RATE と Gemini 全体の上限で数える"""
+        text = str(body.get('text') or '').strip()
+        if not text:
+            return self.send_json(400, {'error': 'empty'})
+        if len(text) > tripask.TEXT_MAX:
+            return self.send_json(400, {'error': 'long'})
+        if not quota_ok() or not LLM_RATE.take(self.client()):
+            return self.send_json(200, {'error': 'quota'})
+        today = tripask.today_of(body.get('today'))
+        try:
+            t0 = time.time()
+            with LLM_SEM:
+                t1 = time.time()
+                raw = (getattr(llm, 'ask_quick', None) or llm.ask)(tripask.build_prompt(body, today), MODEL)
+            print(f'[trip-ask] 順番待ち {t1 - t0:.1f} 秒・Gemini {time.time() - t1:.1f} 秒', flush=True)
+            diff = tripask.clean(places.parse_json(raw), today)
+        except Exception as e:  # noqa: BLE001
+            traceback.print_exc()
+            return self.send_json(200, {'error': 'quota' if '枠' in str(e) else 'failed'})
+        return self.send_json(200, {'diff': diff})
+
     def odai(self, body):
         """場所に合わせた旅のお題を 1 つ考える。{place, level, examples, ...} → {text} か {error}"""
         if not quota_ok() or not ODAI_RATE.take(self.client()):
@@ -1178,6 +1263,18 @@ class H(BaseHTTPRequestHandler):
             return self.send_json(503, {'error': 'unavailable'})
         return self.send_json(200, d) if d else self.send_json(404, {'error': 'notfound'})
 
+    def place_thumb(self, place_id):
+        """一覧の行が画面に入ったときに、その場所の写真の 1 枚目だけを返す（場所の画面の枠は使わない）"""
+        if not gplaces.enabled():
+            return self.send_json(503, {'error': 'off'})
+        if not LIST_RATE.take(self.client()):
+            return self.send_json(503, {'error': 'unavailable'})
+        try:
+            d = gplaces.thumb(place_id)
+        except gplaces.Off:
+            return self.send_json(503, {'error': 'unavailable'})
+        return self.send_json(200, d) if d else self.send_json(404, {'error': 'notfound'})
+
     def place_find(self, body):
         """場所の画面を開いた候補に place_id が無いとき、その 1 か所だけを照合する"""
         if not gplaces.enabled():
@@ -1234,14 +1331,15 @@ class H(BaseHTTPRequestHandler):
         """写真の URL を Places に聞き、そこへ飛ばす（トークンを画面に渡さない）"""
         if not gplaces.enabled():
             return self.send_json(503, {'error': 'off'})
-        if not PLACES_RATE.take(self.client()):
+        listed = q.get('list', [''])[0] == '1'
+        if not (LIST_RATE if listed else PLACES_RATE).take(self.client()):
             return self.send_json(503, {'error': 'unavailable'})
         try:
             width = int(q.get('w', ['960'])[0])
         except ValueError:
             width = 960
         try:
-            uri = gplaces.photo_uri(q.get('name', [''])[0], width)
+            uri = gplaces.photo_uri(q.get('name', [''])[0], width, 'thumb_photo' if listed else 'photo')
         except gplaces.Off:
             return self.send_json(503, {'error': 'unavailable'})
         if not uri:
@@ -1315,7 +1413,7 @@ class H(BaseHTTPRequestHandler):
             except Exception:  # noqa: BLE001
                 traceback.print_exc()
                 return self.send_json(200, {'on': False, 'sources': [], 'error': 'failed', 'contact': CONTACT or None})
-        net, state = (None, 'none') if idxs or pending else self.rail_of(box=box)
+        net, state = self.rail_of(box=box)
         has_rail = net is not None and net.has_lines(bus.area_box([box[:2], box[2:]]))
         try:
             return self.send_json(200, {'on': bool(idxs) or pending, 'sources': bus.sources_of(idxs), 'loading': pending,
@@ -1325,7 +1423,8 @@ class H(BaseHTTPRequestHandler):
 
     def bus_table(self, body):
         """場所どうしの、乗換なしのバス・電車で戸口から戸口までの目安（分）。プランの組み立ての「電車・バス」の時間に使う。
-        時刻表の値がある組みはそのまま使い、無い組みだけ OSM の路線から求めた電車の目安で埋める"""
+        時刻表の値がある組みはそのまま使い、無い組みだけ OSM の路線から求めた電車の目安で埋める。
+        時刻表があって路線を取っている途中なら、時刻表だけの表を railLoading を付けて返す（取れたら聞き直すと電車が入る）"""
         bus_on = BUS.enabled()
         if not bus_on and not RAIL.enabled():
             return self.send_json(200, {'off': True})
@@ -1348,9 +1447,8 @@ class H(BaseHTTPRequestHandler):
             except Exception:  # noqa: BLE001
                 traceback.print_exc()
                 return self.send_json(200, {'error': 'failed'})
-        # 電車の目安は時刻表の無いエリアだけで使う（時刻表のあるエリアの組み立ては、作り置きの路線のあるなしで変えない）
-        net, state = (None, 'none') if idxs or pending else self.rail_of(points=pts)
-        if pending or state == 'pending':
+        net, state = self.rail_of(points=pts)
+        if pending or (state == 'pending' and not idxs):
             return self.send_json(200, {'loading': True})
         if net is not None and not net.lines:
             net = None
@@ -1382,6 +1480,8 @@ class H(BaseHTTPRequestHandler):
         out = {'minutes': table, 'sources': sources}
         if rail_part is not None:
             out['rail'] = rail_part
+        if state == 'pending':
+            out['railLoading'] = True
         try:
             return self.send_json(200, out)
         except (BrokenPipeError, ConnectionResetError):

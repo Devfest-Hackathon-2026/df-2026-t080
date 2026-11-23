@@ -11,7 +11,7 @@ import { crowdGap, FIRST_HOUR, LAST_HOUR, hourly, levelAt } from './crowd'
 import { goalOf, type Leg } from './geo'
 import { sunsetMin } from './sun'
 
-export type PenguinMove = { by: 'walk' | 'train' | 'bus' | 'transit'; min: number }
+export type PenguinMove = { by: 'walk' | 'car' | 'train' | 'bus' | 'transit'; min: number }
 export type PenguinStop = {
   name: string
   kind: string
@@ -57,6 +57,7 @@ const short = (s: string | undefined) => (s ?? '').replace(/\s+/g, ' ').trim().s
 function moveOf(leg: Leg): PenguinMove {
   const min = Math.round(leg.minutes)
   if (leg.mode === 'walk') return { by: 'walk', min }
+  if (leg.mode === 'car') return { by: 'car', min }
   const bus = leg.real?.bus
   if (bus) return { by: bus.mode === 'train' ? 'train' : 'bus', min }
   const rides = (leg.real?.steps ?? []).filter((s) => s.mode === 'train' || s.mode === 'bus')

@@ -1,18 +1,23 @@
 import { useState } from 'react'
 import { Button } from '@astryxdesign/core/Button'
-import { Collapsible } from '@astryxdesign/core/Collapsible'
 import { Heading } from '@astryxdesign/core/Heading'
 import { SegmentedControl, SegmentedControlItem } from '@astryxdesign/core/SegmentedControl'
+import { Switch } from '@astryxdesign/core/Switch'
 import { Text } from '@astryxdesign/core/Text'
 import { TextArea } from '@astryxdesign/core/TextArea'
 import { ToggleButton } from '@astryxdesign/core/ToggleButton'
 import type { AreaData, Condition, Spot } from '../types'
 import type { Pace } from '../lib/planner'
 import { Sheet } from './Sheet'
+import { Row } from './Row'
 import { LeewayField, TimeRows } from './TimeRows'
 import { tr } from '../lib/i18n'
 import { PenguinMark } from './CrowdMark'
 import { type OdaiLevel } from '../lib/odai'
+import { DAY_TEXT, DayCount } from './DayTabs'
+import { dateLabel, fmt } from '../lib/time'
+import { StayFields } from './PlanForm'
+import type { PlaceField } from '../lib/placeField'
 
 // 地区の名前に代表の場所を 2 つまで添える（例: 洛北（金閣寺・詩仙堂））。見どころ・人気の順。名前が長いときは 1 つ
 function districtLabel(d: string, places: Spot[]): string {
@@ -38,6 +43,16 @@ type Props = {
   onStart: (v: number) => void
   onEnd: (v: number) => void
   onNew: () => void
+  // 旅の日数（例のプランには出さない）。made: 作った日数、planned: 予定している日数、max: 選べる一番長い日数、
+  // onAdd: 次の日を加える（加えられるときだけ）、onDelete: 開いている日を消す（何日かある旅だけ）
+  days?: { made: number; planned: number; max: number; onPlanned: (n: number) => void; onAdd?: () => void; onDelete?: () => void }
+  // これから作る日に効く泊の宿の欄（その泊があるときだけ）。nights: 泊の番号（fields と同じ順）、same: 毎晩同じ宿に泊まる、
+  // far: 欄に出す泊ごとの離れすぎの一言
+  stay?: { fields: PlaceField[]; nights: number[]; same: boolean; onSame: (v: boolean) => void; far: (string | null)[]; near?: string }
+  // 開いている日の出発地・到着地が泊まる宿か
+  stayEnds?: { from: boolean; to: boolean }
+  // 開いている日が旅の何日目か（1 始まり）
+  dayNo?: number
   onClose: () => void
   skipDistricts: string[]
   onSkipDistricts: (d: string[]) => void
@@ -58,6 +73,8 @@ type Props = {
   onCalm: (on: boolean) => void
   // 「回り方」のボタン。押すと、シートを開いたまま、その場でプランを組み直す
   onQuick: (what: 'many' | 'slow') => void
+  // 車で回るか（例のプランには出さない）
+  car?: { on: boolean; onChange: (on: boolean) => void }
 }
 
 const T = tr({
@@ -65,7 +82,7 @@ const T = tr({
     namesMax: 14,
     district: (d: string, names: string[]) => `${d}（${names.join('・')}）`,
     thinking: 'Gemini が考えています……',
-    sendFailed: '頼みを送れませんでした。もう一度お試しください。',
+    sendFailed: 'Gemini に頼めませんでした。もう一度お試しください。',
     title: 'プランを変更',
     done: '完了',
     cancel: 'キャンセル',
@@ -77,17 +94,24 @@ const T = tr({
     ask: 'Gemini に頼む',
     askHint: '移動を少なくしたい、早めに帰りたい、など',
     send: '送信',
-    pick: '場所を足す・外す',
+    pick: '場所を追加・削除',
     missions: 'ミッション',
     leeway: '帰りのゆとり',
     join: '・',
     conds: '条件',
     districts: '回る地区',
-    districtsNote: '外した地区の場所は、プランに入れません。',
+    districtsNote: 'オフにした地区の場所は、プランに追加されません。',
     odai: '旅のミッションの数',
     odaiN: (n: number) => `${n}つ`,
     level: '旅のミッションの難しさ',
-    create: '新しい旅を作る',
+    create: '新しい旅を作成',
+    car: '車で回る',
+    none: '指定なし' as string,
+    all: 'すべて' as string,
+    skipN: (n: number) => `${n}地区をオフ`,
+    when: '日時' as string,
+    dayWhen: (n: number) => `${n}日目の日時`,
+    dayTrip: '日帰り' as string,
   },
   en: {
     namesMax: 28,
@@ -116,6 +140,13 @@ const T = tr({
     odaiN: (n: number) => `${n}`,
     level: 'Mission Difficulty',
     create: 'Plan a New Trip',
+    car: 'Get Around by Car',
+    none: 'None',
+    all: 'All',
+    skipN: (n: number) => `${n} Off`,
+    when: 'Date & Time',
+    dayWhen: (n: number) => `Day ${n} Date & Time`,
+    dayTrip: 'Day Trip',
   },
 })
 
@@ -133,9 +164,12 @@ export function AdjustSheet(p: Props) {
   const allConds = [...p.data.conditions, ...p.conds.filter((c) => !p.data.conditions.some((x) => x.tag === c.tag))]
   // 開いたときに入っていた回り方の好みは、外したあとも札を残す（押し直して戻せるように）
   const [prefs] = useState(() => ({ moveLess: p.moveLess, calm: p.calm }))
-  // 開くと出る物（条件・回る地区・ミッション）を、そのまま名前にする
   const hasConds = allConds.length > 0 || prefs.moveLess || prefs.calm
-  const moreLabel = [hasConds && T.conds, districts.length > 1 && T.districts, T.leeway, T.missions].filter(Boolean).join(T.join)
+  // 泊まりの旅では、時刻が開いている日の物だと分かるように、見出しに何日目かを出す
+  const staying = (p.days?.planned ?? 1) > 1
+  // 行の右に出す今の値（押してある条件の名前・オフにした地区の数）
+  const condNames = [p.moveLess && T.moveLess, p.calm && T.calm, ...allConds.filter((c) => active.has(c.tag)).map((c) => c.label)].filter((x): x is string => !!x)
+  const skipped = districts.filter((d) => p.skipDistricts.includes(d)).length
 
   const send = async () => {
     const t = text.trim()
@@ -195,64 +229,70 @@ export function AdjustSheet(p: Props) {
         </section>
       )}
 
-      <section className="sheet-sec panel-sec">
-        <TimeRows idPrefix="adj" date={p.date} start={p.start} end={p.end} onDate={p.onDate} onStart={p.onStart} onEnd={p.onEnd} startName={p.data.start.name} endName={p.data.end?.name} oneWay={!!p.data.end} />
+      <section className="sheet-sec adjust-rows">
+        <Row name={staying ? T.dayWhen(p.dayNo ?? 1) : T.when} value={`${dateLabel(p.date)}　${fmt(p.start)}〜${fmt(p.end)}`} open={!p.onAsk}>
+          <TimeRows idPrefix="adj" date={p.date} start={p.start} end={p.end} onDate={p.onDate} onStart={p.onStart} onEnd={p.onEnd} startName={p.data.start.name} endName={p.data.end?.name} oneWay={!!p.data.end} stayFrom={p.stayEnds?.from} stayTo={p.stayEnds?.to} />
+          <LeewayField start={p.start} end={p.end} value={p.leeway} onChange={p.onLeeway} oneWay={!!p.data.end || !!p.stayEnds?.to} />
+          {p.car && (
+            <div className="car-field">
+              <Switch label={T.car} value={p.car.on} onChange={(v) => p.car!.onChange(v)} labelPosition="start" labelSpacing="spread" />
+            </div>
+          )}
+        </Row>
+        {p.days && (
+          <Row name={DAY_TEXT.count} value={staying ? DAY_TEXT.nights(p.days.planned - 1) : T.dayTrip}>
+            <div className="trip-days" role="group" aria-label={DAY_TEXT.count}>
+              <DayCount value={p.days.planned} made={p.days.made} max={p.days.max} onChange={p.days.onPlanned} />
+              {p.stay && <StayFields idPrefix="adj-stay" fields={p.stay.fields} nights={p.stay.nights} same={p.stay.same} onSame={p.stay.onSame} far={p.stay.far} near={p.stay.near} numbered />}
+              {p.days.onAdd && <Button variant="primary" width="100%" className="day-add" label={DAY_TEXT.add(p.days.made + 1)} onClick={p.days.onAdd} />}
+            </div>
+          </Row>
+        )}
+        {hasConds && (
+          <Row name={T.conds} value={condNames.length ? condNames.join(T.join) : T.none} open={prefs.moveLess || prefs.calm}>
+            <div className="toggles">
+              {prefs.moveLess && <ToggleButton label={T.moveLess} isPressed={p.moveLess} onPressedChange={() => p.onMoveLess(!p.moveLess)} />}
+              {prefs.calm && <ToggleButton label={T.calm} isPressed={p.calm} onPressedChange={() => p.onCalm(!p.calm)} />}
+              {allConds.map((c) => (
+                <ToggleButton key={c.tag} label={c.label} isPressed={active.has(c.tag)} onPressedChange={() => toggleCond(c)} />
+              ))}
+            </div>
+          </Row>
+        )}
+        {districts.length > 1 && (
+          <Row name={T.districts} value={skipped ? T.skipN(skipped) : T.all}>
+            <Text as="p" display="block" type="supporting" className="note">
+              {T.districtsNote}
+            </Text>
+            <div className="toggles">
+              {districts.map((d) => {
+                const on = !p.skipDistricts.includes(d)
+                return (
+                  <ToggleButton
+                    key={d}
+                    label={districtLabel(d, p.data.places)}
+                    isPressed={on}
+                    onPressedChange={() => p.onSkipDistricts(on ? [...p.skipDistricts, d] : p.skipDistricts.filter((x) => x !== d))}
+                  />
+                )
+              })}
+            </div>
+          </Row>
+        )}
+        <Row name={T.missions} value={T.odaiN(p.odaiCount)}>
+          <SegmentedControl value={String(p.odaiCount)} onChange={(v) => p.onOdaiCount(Number(v))} label={T.odai} layout="fill">
+            {[1, 2, 3].map((n) => (
+              <SegmentedControlItem key={n} value={String(n)} label={T.odaiN(n)} />
+            ))}
+          </SegmentedControl>
+        </Row>
       </section>
 
-      {
-        <Collapsible className="sheet-sec more" defaultIsOpen={prefs.moveLess || prefs.calm} trigger={<span className="more-label">{moreLabel}</span>}>
-          <div className="more-part">
-            <LeewayField start={p.start} end={p.end} value={p.leeway} onChange={p.onLeeway} oneWay={!!p.data.end} />
-          </div>
-          {hasConds && (
-            <div className="more-part">
-              <Heading level={3} className="sec-title">
-                {T.conds}
-              </Heading>
-              <div className="toggles">
-                {prefs.moveLess && <ToggleButton label={T.moveLess} isPressed={p.moveLess} onPressedChange={() => p.onMoveLess(!p.moveLess)} />}
-                {prefs.calm && <ToggleButton label={T.calm} isPressed={p.calm} onPressedChange={() => p.onCalm(!p.calm)} />}
-                {allConds.map((c) => (
-                  <ToggleButton key={c.tag} label={c.label} isPressed={active.has(c.tag)} onPressedChange={() => toggleCond(c)} />
-                ))}
-              </div>
-            </div>
-          )}
-          {districts.length > 1 && (
-            <div className="more-part">
-              <Heading level={3} className="sec-title">
-                {T.districts}
-              </Heading>
-              <Text as="p" display="block" type="supporting" className="note">
-                {T.districtsNote}
-              </Text>
-              <div className="toggles">
-                {districts.map((d) => {
-                  const on = !p.skipDistricts.includes(d)
-                  return (
-                    <ToggleButton
-                      key={d}
-                      label={districtLabel(d, p.data.places)}
-                      isPressed={on}
-                      onPressedChange={() => p.onSkipDistricts(on ? [...p.skipDistricts, d] : p.skipDistricts.filter((x) => x !== d))}
-                    />
-                  )
-                })}
-              </div>
-            </div>
-          )}
-          <div className="more-part">
-            <Heading level={3} className="sec-title">
-              {T.odai}
-            </Heading>
-            <SegmentedControl value={String(p.odaiCount)} onChange={(v) => p.onOdaiCount(Number(v))} label={T.odai} layout="fill">
-              {[1, 2, 3].map((n) => (
-                <SegmentedControlItem key={n} value={String(n)} label={T.odaiN(n)} />
-              ))}
-            </SegmentedControl>
-          </div>
-        </Collapsible>
-      }
+      {p.days?.onDelete && (
+        <section className="sheet-sec day-delete">
+          <Button variant="destructive" width="100%" label={DAY_TEXT.remove} onClick={p.days.onDelete} />
+        </section>
+      )}
     </Sheet>
   )
 }

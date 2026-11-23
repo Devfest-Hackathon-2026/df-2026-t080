@@ -10,6 +10,7 @@ import { localTitle } from '../lib/areaNames'
 import { askOpenAfterLang, askRecapOnOpen, openAfterLang } from '../lib/homeIntent'
 import { currentTripId, deleteTrip, DEVICE_MAX, loadTrip, newTrip, openTrip, removeFromShelf, shelfTrip, useShelf, useTrips, type TripMeta } from '../lib/trips'
 import { ACCOUNT_TEXT, useAccount } from './Account'
+import { DAY_TEXT, rangeLabel } from './DayTabs'
 import { LangSwitch } from './LangSwitch'
 import { Thumb } from './Thumb'
 import { GoogleMark } from './GoogleMark'
@@ -22,7 +23,7 @@ const T = tr({
     lead: 'Gemini が候補と注意点を出し、行く場所はあなたが理由を持って選びます。',
     demoLine: '清水寺に朝いちばんに着く、京都の1日',
     mine: '自分の旅',
-    device: 'この端末の旅',
+    device: 'このデバイスの旅',
     now: '今開いている旅',
     sep: '・',
     stops: (n: number) => `${n}か所`,
@@ -30,18 +31,18 @@ const T = tr({
     open: (title: string) => `${title}を開く`,
     remove: '削除',
     removeOf: (title: string) => `${title}を削除`,
-    confirm: (title: string) => `「${title}」を削除しますか？この端末で開いているプランは残ります。`,
-    confirmLocal: (title: string) => `「${title}」をこの端末から削除しますか？`,
+    confirm: (title: string) => `「${title}」を削除しますか？このデバイスで開いているプランは削除されません。`,
+    confirmLocal: (title: string) => `「${title}」をこのデバイスから削除しますか？`,
     removeFailed: '削除できませんでした。もう一度お試しください。',
     openFailed: '旅を開けませんでした。もう一度お試しください。',
     opening: '開いています……',
     loading: '旅を読み込んでいます……',
     empty: 'まだ旅がありません。',
-    create: '新しい旅を作る',
-    hint: 'ログインすると、別の端末でも同じ旅が開けます。',
-    keep: (n: number) => `この端末には旅を${n}件まで残せます。超えると古い旅から消えます。`,
-    upcoming: 'これからの旅',
-    past: '行った旅',
+    create: '新しい旅を作成',
+    hint: 'ログインすると、ほかのデバイスでも同じ旅を開けます。',
+    keep: (n: number) => `このデバイスには旅を${n}件まで保存できます。上限を超えると、古い旅から削除されます。`,
+    upcoming: '今後の旅',
+    past: '過去の旅',
     today: '今日',
     tomorrow: '明日',
     left: (n: number): [string, string, string] => ['あと', `${n}`, '日'],
@@ -59,7 +60,7 @@ const T = tr({
     demoLine: 'A Kyoto day that reaches Kiyomizu-dera before the crowds',
     mine: 'Your Trips',
     device: 'Trip on This Device',
-    now: 'Open Now',
+    now: 'Current Trip',
     sep: ' · ',
     stops: (n: number) => `${n} ${n === 1 ? 'place' : 'places'}`,
     edited: (t: string) => `Saved ${t}`,
@@ -102,7 +103,8 @@ const editedFmt = new Intl.DateTimeFormat(isEn ? 'en-US' : 'ja-JP', {
 })
 
 // 端末にある今のプラン（ログインしていなくても開ける）。places・first はプランを組めていれば（回る場所の名前と、最初の場所）
-export type DeviceTrip = { title: string; date: string; places?: string[]; first?: Spot | null }
+// dates: 何日かある旅の全日の日付（date は 1日目）
+export type DeviceTrip = { title: string; date: string; dates?: string[]; places?: string[]; first?: Spot | null }
 
 // もう片方の言語で作った、端末のプラン（押すと、その言語に切り替えて開く）
 export type OtherTrip = { title: string; date: string }
@@ -119,13 +121,13 @@ type Props = {
 // 一覧の 1 件（端末の今の旅か、クラウドの旅）
 // foreign: もう片方の言語で作った旅（その言語に切り替えて開く）
 // local: この端末の棚にだけある旅
-type Entry = { key: string; title: string; date: string; now: boolean; trip: TripMeta | null; local?: boolean; places?: string[]; first?: Spot | null; foreign?: Lang }
+type Entry = { key: string; title: string; date: string; dates?: string[]; now: boolean; trip: TripMeta | null; local?: boolean; places?: string[]; first?: Spot | null; foreign?: Lang }
 
 const otherLang: Lang = isEn ? 'ja' : 'en'
 
 const PLACES_MAX = isEn ? 2 : 3
 
-// 旅の日までの残り（これからの旅の札の右）。「あと 7 日」の数を大きく
+// 旅の日までの残り（今後の旅の札の右）。「あと 7 日」の数を大きく
 function Countdown({ date }: { date: string }) {
   const d = daysUntil(date)
   if (d === 0) return <span className="home-left home-left-word">{T.today}</span>
@@ -187,9 +189,10 @@ export function Home({ device, onOpenDevice, onRecapDevice, onRemoveDevice, onEx
   const none = ready && !(signedIn && !trips)
   // 端末の今の旅が、まだクラウドの一覧に無いとき（ログインしていない・保存の途中・消したあと）は、別に出す
   const showDevice = !!device && !(list && now && list.some((t) => t.id === now))
-  // これからの旅（近い順）と、行った旅（新しい順）に分ける。今の旅には、端末のプランの場所の名前と写真を添える
+  const shelfDates = new Map(shelf.map((t) => [t.id, t.dates]))
+  // 今後の旅（近い順）と、過去の旅（新しい順）に分ける。今の旅には、端末のプランの場所の名前と写真を添える
   const entries: Entry[] = [
-    ...(showDevice && device ? [{ key: 'device', title: localTitle(device.title), date: device.date, now: true, trip: null, places: device.places, first: device.first }] : []),
+    ...(showDevice && device ? [{ key: 'device', title: localTitle(device.title), date: device.date, dates: device.dates, now: true, trip: null, places: device.places, first: device.first }] : []),
     ...(list ?? []).map((t) => {
       const isNow = t.id === now && !!device
       return {
@@ -198,13 +201,14 @@ export function Home({ device, onOpenDevice, onRecapDevice, onRemoveDevice, onEx
         date: t.date,
         now: isNow,
         trip: t,
+        dates: isNow && device ? device.dates : shelfDates.get(t.id),
         ...(isNow && device ? { places: device.places, first: device.first } : {}),
         ...(t.lang !== lang ? { foreign: t.lang } : {}),
       }
     }),
     ...shelf
       .filter((t) => t.id !== now && !(list ?? []).some((c) => c.id === t.id))
-      .map((t) => ({ key: t.id, title: t.title, date: t.date, now: false, trip: t, local: true })),
+      .map((t) => ({ key: t.id, title: t.title, date: t.date, dates: t.dates, now: false, trip: t, local: true })),
     // もう片方の言語の端末のプラン（同じ旅がクラウドの一覧にあれば、そちらに任せる）
     ...(other && !(list ?? []).some((t) => t.lang === otherLang && t.date === other.date && t.title === other.title)
       ? [{ key: 'other', title: localTitle(other.title), date: other.date, now: false, trip: null, foreign: otherLang }]
@@ -253,7 +257,7 @@ export function Home({ device, onOpenDevice, onRecapDevice, onRemoveDevice, onEx
     // 一覧が届いたときの 1 回だけ
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [wanted, trips])
-  // 行った旅を振り返る（振り返りカードを開く）。端末の今の旅はそのまま、ほかの旅は開いてから
+  // 過去の旅を振り返る（振り返りカードを開く）。端末の今の旅はそのまま、ほかの旅は開いてから
   const recap = async (e: Entry) => {
     if (busyId) return
     if (e.now && device) return onRecapDevice()
@@ -287,7 +291,7 @@ export function Home({ device, onOpenDevice, onRecapDevice, onRemoveDevice, onEx
     if (!ok) setMsg(T.removeFailed)
   }
 
-  // 旅がまだ無い人（初めて開いた人）には、デモを上に出す。旅がある人には、新しい旅を作るボタンを一覧の上に出す（ボタンはいつも主の色）
+  // 旅がまだ無い人（初めて開いた人）には、デモを上に出す。旅がある人には、新しい旅を作成ボタンを一覧の上に出す（ボタンはいつも主の色）
   const first = entries.length === 0 && none
   const create = <Button variant="primary" size="lg" width="100%" className="home-new" label={T.create} isDisabled={!!busyId} onClick={newTrip} />
 
@@ -342,7 +346,7 @@ export function Home({ device, onOpenDevice, onRecapDevice, onRemoveDevice, onEx
                       )}
                       <span className="home-text">
                         <span className="home-title">{e.title}</span>
-                        <span className="home-date num">{dateLabel(e.date)}</span>
+                        <span className="home-date num">{e.dates ? rangeLabel(e.dates) : dateLabel(e.date)}</span>
                         {names.length > 0 && <span className="home-places">{T.places(names.slice(0, PLACES_MAX), 0)}</span>}
                         <span className="home-meta">
                           {busy ? (
@@ -352,6 +356,13 @@ export function Home({ device, onOpenDevice, onRecapDevice, onRemoveDevice, onEx
                               {e.foreign && <span className="home-foreign" lang={e.foreign}>{T.madeIn(e.foreign)}</span>}
                               {e.foreign && e.trip && T.sep}
                               {e.now && <span className="home-now">{T.now}</span>}
+                              {e.dates && (
+                                <>
+                                  {e.now && T.sep}
+                                  <span className="num">{DAY_TEXT.days(e.dates.length)}</span>
+                                  {e.trip && !e.now && T.sep}
+                                </>
+                              )}
                               {e.now && !e.trip && names.length > 0 && (
                                 <>
                                   {T.sep}

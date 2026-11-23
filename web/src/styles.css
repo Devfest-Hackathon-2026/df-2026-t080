@@ -635,6 +635,84 @@ input[type='time']::-webkit-date-and-time-value {
   font-weight: 700;
 }
 
+/* 候補を探している間の、行き先の見どころとお店（見どころとお店に分けて、名前と特徴。届いたときに上から 1 行ずつ現れる） */
+.wait-spots {
+  padding: 18px 16px 14px;
+  border-radius: var(--r-m);
+  background: var(--surface);
+}
+.wait-group + .wait-group {
+  margin-top: 18px;
+}
+.wait-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.wait-head .penguin-mark {
+  flex: none;
+}
+.wait-group-title {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1.5;
+  color: var(--ink-2);
+}
+.wait-list {
+  display: grid;
+  gap: 12px;
+  margin: 12px 0 0;
+  padding: 0;
+  list-style: none;
+}
+.wait-list li {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+  animation: wait-in 0.4s ease both;
+  animation-delay: calc(var(--i, 0) * 90ms);
+}
+.wait-list .thumb {
+  margin-right: 0;
+}
+.wait-text {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+.wait-name {
+  font-size: 15px;
+  font-weight: 600;
+  line-height: 1.4;
+  color: var(--ink);
+}
+.wait-why {
+  display: -webkit-box;
+  overflow: hidden;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--ink-2);
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+}
+.wait-spots .photo-credits {
+  margin-top: 8px;
+}
+@keyframes wait-in {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .wait-list li {
+    animation: none;
+  }
+}
+
 /* プランの画面 */
 .plan-view {
   min-height: 100dvh;
@@ -810,7 +888,7 @@ input[type='time']::-webkit-date-and-time-value {
 .map-legend-toggle::after {
   content: '';
   position: absolute;
-  inset: -6px -4px;
+  inset: -8px -6px;
 }
 .map-legend-toggle svg {
   fill: none;
@@ -886,6 +964,13 @@ input[type='time']::-webkit-date-and-time-value {
   stroke: var(--route);
   stroke-width: 4;
   stroke-linecap: round;
+}
+/* 地図の路線の色の並び（lib/lineColor.ts の PALETTE）から、赤と青 */
+.lg-lines path:first-child {
+  stroke: #d23c3c;
+}
+.lg-lines path:last-child {
+  stroke: #2f7fd1;
 }
 .lg-stn {
   width: 10px;
@@ -1092,6 +1177,12 @@ html:has(body > .toast) .map-float {
     display: none;
   }
 }
+/* ページの終わりの行が「地図」のボタンに隠れないよう、ボタンの高さの分だけ下を空ける */
+@media (max-width: 959px) {
+  html:has(.map-float) .panel {
+    padding-bottom: calc(var(--tap) + 32px + env(safe-area-inset-bottom, 0px));
+  }
+}
 /* 拡大と縮小は、広い画面・マウスのある画面・全画面の地図だけ（スマホのふだんの地図は指で広げる） */
 .map-tools.map-zoom {
   display: none;
@@ -1228,46 +1319,62 @@ html:has(body > .toast) .map-float {
 
 /* 混雑する場所での滞在（概要の札の下の段。押すと 2 本の棒で比べる） */
 .cmp {
-  margin: 10px -16px 0;
-  padding: 0 16px;
-  border-top: 1px solid var(--line);
+  margin: 0;
 }
 /* 混雑を避ける代案（比べのすぐ下） */
 .crowd-swap {
   display: grid;
-  gap: 8px;
+  gap: 16px;
   margin: 0 0 12px;
   padding: 0;
   list-style: none;
 }
 .crowd-swap-item {
-  padding-top: 8px;
+  display: grid;
+  gap: 4px;
+  padding-top: 16px;
   border-top: 1px solid var(--line);
 }
-.crowd-swap-busy {
-  margin: 0;
-  font-size: 13px;
-  color: var(--ink-2);
+.crowd-swap-item:first-child {
+  padding-top: 0;
+  border-top: 0;
 }
-.crowd-swap-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-  margin-top: 4px;
-}
-.crowd-swap-alt {
+.crowd-swap-head {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   gap: 4px 8px;
   min-width: 0;
+}
+.crowd-swap-busy-name,
+.crowd-swap-name {
   margin: 0;
   font-size: 15px;
-  font-weight: 600;
+  font-weight: 700;
+}
+.crowd-swap-busy,
+.crowd-swap-meta {
+  margin: 0;
+  font-size: 13px;
+  color: var(--ink-2);
+}
+.crowd-swap-alt-box {
+  display: grid;
+  gap: 4px;
+  margin-top: 8px;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-m);
+  background: var(--surface);
+}
+.crowd-swap-why {
+  margin: 0;
+  font-size: 14px;
+  line-height: 1.5;
 }
 .crowd-swap-btn {
-  flex: none;
+  justify-self: start;
+  margin-top: 4px;
   min-height: var(--tap);
 }
 .cmp[open] {
@@ -1275,10 +1382,9 @@ html:has(body > .toast) .map-float {
 }
 .cmp-sum {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   gap: 10px;
-  min-height: var(--tap);
-  padding: 10px 0;
+  padding: 2px 0;
   cursor: pointer;
   list-style: none;
 }
@@ -1290,149 +1396,118 @@ html:has(body > .toast) .map-float {
   flex: none;
   width: 8px;
   height: 8px;
-  margin: -4px 4px 0 0;
+  margin: 30px 4px 0 0;
   border: solid var(--ink-2);
   border-width: 0 2px 2px 0;
   transform: rotate(45deg);
   transition: transform 0.15s;
 }
 .cmp[open] > .cmp-sum::after {
-  margin-top: 4px;
+  margin-top: 36px;
   transform: rotate(-135deg);
 }
-.cmp-line {
-  flex: 1;
-  min-width: 0;
-  font-size: 13px;
-  line-height: 1.5;
-  color: var(--ink-2);
-  word-break: auto-phrase;
-}
-.cmp-line strong {
-  color: var(--ink);
-  font-weight: 700;
-}
-.cmp-line strong.cmp-good {
-  color: var(--route);
-}
-.cmp-nums {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: baseline;
-  gap: 0 8px;
-  margin-top: 4px;
-}
-.cmp-nums .nw {
-  white-space: nowrap;
-}
-.cmp-line .cmp-nums strong {
-  font-size: 17px;
-  line-height: 1.2;
-}
-.cmp-diff {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0 16px;
-  margin-top: 4px;
-}
-.cmp-diff strong {
-  white-space: nowrap;
-}
-.cmp-still {
+.cmp-still .cmp-sum {
   cursor: default;
 }
-.cmp-still::after {
+.cmp-still .cmp-sum::after {
   content: none;
+}
+.cmp-main {
+  display: grid;
+  flex: 1;
+  min-width: 0;
+}
+/* 何の比べか（補足の字） */
+.cmp-what {
+  font-size: 13px;
+  color: var(--ink-2);
+}
+/* 主役: 差。割合は 28px、言葉は 17px の太字 */
+.cmp-head {
+  margin-top: 2px;
+  font-size: 17px;
+  font-weight: 700;
+  line-height: 1.3;
+  color: var(--ink);
+  word-break: auto-phrase;
+}
+.cmp-big {
+  margin-right: 1px;
+  font-size: 28px;
+  line-height: 1.2;
+  color: var(--route);
+}
+/* 2 本の棒（上がよくある回り方、下がこのプラン） */
+.cmp-bars {
+  display: grid;
+  gap: 6px;
+  margin-top: 10px;
 }
 .cmp-row {
   display: grid;
-  grid-template-columns: 7.5em minmax(0, 1fr) auto;
+  grid-template-columns: 7em minmax(0, 1fr) 5.5em;
   align-items: center;
   gap: 10px;
-  margin-top: 8px;
 }
 .cmp-label {
   font-size: 13px;
+  color: var(--ink-2);
+}
+.cmp-row.mine .cmp-label {
   font-weight: 700;
   color: var(--ink);
 }
-.cmp-row.usual .cmp-label {
-  color: var(--ink-2);
-  font-weight: 400;
-}
 .cmp-bar {
-  height: 14px;
-  border-radius: 7px;
-  background: var(--heat-0);
+  height: 10px;
+  border-radius: 5px;
+  background: color-mix(in srgb, var(--ink-3) 18%, transparent);
   overflow: hidden;
 }
 .cmp-fill {
   display: block;
   height: 100%;
-  min-width: 3px;
-  border-radius: 7px;
-  background: var(--heat-3);
+  min-width: 4px;
+  border-radius: 5px;
+  background: color-mix(in srgb, var(--ink-3) 60%, transparent);
 }
-.cmp-row.usual .cmp-fill {
-  background: var(--ink-3);
+.cmp-row.mine .cmp-fill {
+  background: var(--cmp-mine, var(--route));
 }
 .cmp-value {
-  min-width: 5.5em;
   text-align: right;
-  font-size: 17px;
-  font-weight: 600;
+  font-size: 15px;
   color: var(--ink-2);
   white-space: nowrap;
 }
 .cmp-value.strong {
-  font-size: 22px;
   font-weight: 700;
   color: var(--ink);
 }
-@container plan-panel (max-width: 20em) {
+.cmp-move {
+  margin: 10px 0 0;
+  font-size: 13px;
+  color: var(--ink-2);
+}
+.cmp-move strong {
+  color: var(--ink);
+}
+@container plan-panel (max-width: 30em) {
   .cmp-row {
-    grid-template-columns: minmax(0, 1fr) auto;
-    gap: 4px 10px;
+    grid-template-columns: auto minmax(0, 1fr);
+    gap: 2px 8px;
   }
-  .cmp-label {
+  .cmp-value {
+    text-align: left;
+  }
+  .cmp-bar {
     grid-column: 1 / -1;
+    grid-row: 2;
   }
 }
 
-/* 概要の札のいちばん上に置いた混雑の比べ。減った割合（全部避けたときは、このプランの分）をいちばん大きく、浅葱で */
-.summary > .cmp:first-child {
-  margin: -8px -16px 12px;
-  border-top: 0;
-  border-bottom: 1px solid var(--line);
-}
-.summary > .cmp:first-child .cmp-line {
-  display: flex;
-  flex-direction: column;
-}
-.summary > .cmp:first-child .cmp-diff {
-  order: 1;
-  align-items: baseline;
-}
-.summary > .cmp:first-child .cmp-nums {
-  order: 2;
-}
-.summary > .cmp:first-child .cmp-diff > span:first-child {
-  font-size: 15px;
-  font-weight: 700;
-  color: var(--ink);
-}
-.summary > .cmp:first-child .cmp-nums strong {
-  font-size: 15px;
-}
-.summary > .cmp.cmp-win .cmp-big,
-.summary > .cmp.cmp-all .cmp-nums strong.cmp-good {
-  font-size: 28px;
-  line-height: 1.2;
-  color: var(--route);
-}
 /* 服装の目安 */
 .wear {
-  margin-top: 10px;
+  margin-top: 12px;
   padding: 12px 16px;
   border-radius: var(--r-m);
   background: var(--surface);
@@ -1497,15 +1572,10 @@ html:has(body > .toast) .map-float {
 
 /* ペンギンの一言（届いて閉じていなければ、服装の目安の札の代わりに出す） */
 .penguin {
-  margin-top: 10px;
+  margin-top: 12px;
   padding: 0 12px 12px 16px;
   border-radius: var(--r-m);
   background: var(--surface);
-}
-/* 閉じたペンギンの一言を、もう一度出すボタン */
-.penguin-back {
-  margin-top: 8px;
-  min-height: var(--tap);
 }
 .schedule + .penguin,
 .schedule + .fav-ask,
@@ -1525,15 +1595,15 @@ html:has(body > .toast) .map-float {
   flex: none;
 }
 .penguin-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
   font-size: 13px;
   font-weight: 700;
   color: var(--ink-2);
 }
-.btn-quiet.penguin-close {
-  min-width: var(--tap);
-  margin-left: auto;
-  padding: 0 4px;
-  font-size: 13px;
+.penguin-toggle {
+  flex: 1;
 }
 .penguin-lines {
   display: grid;
@@ -2148,7 +2218,8 @@ html:has(body > .toast) .map-float {
   display: flex;
   flex-direction: column;
   gap: 8px;
-  margin: 8px 0 4px;
+  margin: 0 0 8px;
+  padding: 0 20px;
 }
 .sum-fit .note {
   margin: 0;
@@ -2291,7 +2362,7 @@ button.rt-node:hover {
   background: color-mix(in srgb, var(--route-soft) 55%, var(--surface));
 }
 .rt-time {
-  font-size: 22px;
+  font-size: 20px;
   font-weight: 600;
   line-height: 1.2;
   text-align: right;
@@ -2317,6 +2388,13 @@ button.rt-node:hover {
   margin-left: -3px;
   background: var(--route);
 }
+/* 電車・バスの区間の線は、その路線の色（色が分からない路線は浅葱） */
+.rt-node > .rt-rail::before {
+  background: var(--rail-in, var(--route));
+}
+.rt-node > .rt-rail::after {
+  background: var(--rail-out, var(--route));
+}
 .rt-node > .rt-rail::before {
   top: -8px;
   bottom: 50%;
@@ -2332,7 +2410,7 @@ button.rt-node:hover {
 .rt-node[data-in='walk'] > .rt-rail::before,
 .rt-node[data-out='walk'] > .rt-rail::after,
 .rt-leg[data-mode='walk'] > .rt-rail::before {
-  background: radial-gradient(circle, var(--route) 2.6px, transparent 3px) center top / 6px 10px repeat-y;
+  background: radial-gradient(circle, var(--rail-walk, var(--route)) 2.6px, transparent 3px) center top / 6px 10px repeat-y;
 }
 .rt-leg {
   display: grid;
@@ -2352,7 +2430,7 @@ button.rt-node:hover {
   bottom: -8px;
   width: 6px;
   margin-left: -3px;
-  background: var(--route);
+  background: var(--rail, var(--route));
 }
 .badge {
   position: relative;
@@ -2417,19 +2495,6 @@ button.rt-node:hover {
   color: var(--ink-2);
 }
 .rt-meta .nw {
-  white-space: nowrap;
-}
-/* 旅の締めくくりと、その訳。狭いときは訳の前で折り返す */
-.rt-fin > span {
-  white-space: nowrap;
-}
-/* 場所の行の補足（希望に合う・締めくくり） */
-.rt-note {
-  display: block;
-  font-size: 13px;
-  color: var(--ink-2);
-}
-.rt-note .nw {
   white-space: nowrap;
 }
 .rt-warn {
@@ -2506,37 +2571,19 @@ span.thumb {
 .rt-leg-btn:hover {
   background: var(--route-soft);
 }
-.rt-leg-body {
-  display: grid;
-  justify-items: start;
-  gap: 2px;
-  min-width: 0;
-}
-.rt-leg-head .mode-icon {
-  margin-left: -1.5px;
-}
-.rt-leg-mode,
-.rt-leg-line,
-.rt-leg-min {
-  font-weight: 700;
-  color: var(--ink);
-}
-.rt-leg-mode,
-.rt-leg-min,
-.rt-leg-extra {
-  white-space: nowrap;
-}
-.rt-leg-line {
-  white-space: nowrap;
-}
-.rt-leg-sep {
-  font-weight: 400;
-  color: var(--ink-2);
-}
-.rt-leg-head .rt-slope {
+.rt-leg-head {
   display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 2px 6px;
+}
+/* 徒歩の区間の坂: 分の右に、灰の小さな高さの線と一言 */
+.rt-leg-head .rt-slope {
+  display: inline-flex;
   align-items: center;
   gap: 6px;
+  margin-left: 4px;
+  white-space: nowrap;
   color: var(--ink-2);
 }
 .rt-slope svg {
@@ -2546,6 +2593,38 @@ span.thumb {
   stroke-width: 1.5;
   stroke-linecap: round;
   stroke-linejoin: round;
+}
+.rt-leg-body {
+  display: grid;
+  justify-items: start;
+  gap: 2px;
+  min-width: 0;
+}
+.rt-leg-head .mode-icon {
+  margin: 0 -2px 0 -1.5px;
+  color: var(--ink-2);
+}
+.rt-leg-head .line-chip {
+  padding: 0 6px;
+  font-size: 13px;
+  line-height: 20px;
+}
+.rt-leg-then {
+  color: var(--ink-2);
+}
+.rt-leg-btn > svg,
+.rt-leg-btn > [class*='astryx-'] {
+  color: var(--ink-2);
+}
+.rt-leg-mode,
+.rt-leg-min {
+  font-weight: 700;
+  color: var(--ink);
+}
+.rt-leg-mode,
+.rt-leg-min,
+.rt-leg-extra {
+  white-space: nowrap;
 }
 /* 乗る時刻・停留所・着く時刻（1 行。入りきらないときは停留所の名前だけを「…」で切る） */
 .rt-leg-when {
@@ -2581,16 +2660,6 @@ span.thumb {
   clip-path: inset(50%);
   white-space: nowrap;
   border: 0;
-}
-/* 電車・バスの区間の押した先（便を見る ›）。路線と分の下の行に、路線図の線と同じ色で */
-.rt-leg-see {
-  display: inline-flex;
-  align-items: center;
-  gap: 1px;
-  color: var(--route);
-  font-size: 13px;
-  font-weight: 600;
-  white-space: nowrap;
 }
 .rt-leg-go {
   flex: none;
@@ -3048,6 +3117,29 @@ span.thumb {
 .elev-credit a {
   color: inherit;
 }
+/* 出典のリンクは字が小さく、押せる所が字の高さしかない。見た目は変えずに、押せる所を上下に広げる。
+   1 行だけの天気の出典は 44px まで。上下に別の行が並ぶ所は、となりの行と重ならない所まで */
+.weather-credit a,
+.osm-credit a,
+.elev-credit a,
+.bus-credit a {
+  position: relative;
+}
+.weather-credit a::after,
+.osm-credit a::after,
+.elev-credit a::after,
+.bus-credit a::after {
+  content: '';
+  position: absolute;
+  inset: -2px -2px;
+}
+.weather-credit a::after {
+  inset: -16px -4px;
+}
+.note.foot.osm-credit a::after,
+.note.foot.elev-credit a::after {
+  inset: -5px -2px;
+}
 .photo-credits {
   margin: 20px 0 0;
   font-size: 12px;
@@ -3461,7 +3553,7 @@ span.thumb {
   height: 22px;
   padding: 0 6px;
   border: 1.5px solid var(--line);
-  border-radius: 5px;
+  border-radius: var(--r-s);
   background: var(--surface);
   color: var(--ink);
   font: 600 13px/1 var(--font-num);
@@ -3795,6 +3887,9 @@ html[lang='en'] .mlayer > :is(.mstop-name, .mstart-name, .mcand-name, .mstn-name
   margin: -4px 0 12px;
   font-size: 14px;
 }
+.gplace-line {
+  margin: 0;
+}
 .gplace-rating {
   display: flex;
   align-items: center;
@@ -3981,6 +4076,9 @@ html[lang='en'] .mlayer > :is(.mstop-name, .mstart-name, .mcand-name, .mstn-name
   flex-wrap: wrap;
   align-items: center;
   column-gap: 10px;
+}
+.lead-row > .lead-note {
+  flex-basis: 100%;
 }
 /* ログインと言語の切り替え（調整のシートの一番下。新しいプランのボタンの下に並べる） */
 .sheet-actions.account {
@@ -4184,7 +4282,7 @@ details.more[open] > summary::after {
   display: grid;
   gap: 10px;
   margin-top: 16px;
-  padding: 16px;
+  padding: 16px 16px 16px 20px;
   border-radius: var(--r-m);
   background: var(--surface);
 }
@@ -4196,7 +4294,7 @@ details.more[open] > summary::after {
   padding-bottom: 0;
 }
 .odai-fold[data-open] {
-  padding-bottom: 16px;
+  padding-bottom: 20px;
 }
 .odai-toggle {
   display: flex;
@@ -4231,6 +4329,7 @@ details.more[open] > summary::after {
 .odai-body {
   display: grid;
   gap: 10px;
+  padding-right: 4px;
 }
 .odai-body[hidden] {
   display: none;
@@ -4366,29 +4465,12 @@ button.odai-place::after {
   inset: calc((32px - var(--tap)) / 2) 0;
 }
 .panel > .odai {
-  margin: 10px 0 0;
+  margin: 12px 0 0;
 }
 
 /* 選んだ理由 */
 .why {
   margin-top: 16px;
-}
-/* 場所の画面のいちばん上の、選んだ理由の欄へ送るボタン（半分の高さでも見える所） */
-.why-go {
-  gap: 2px;
-  margin: 0 0 8px;
-  padding: 0;
-  border: 0;
-  background: none;
-  font-family: inherit;
-  cursor: pointer;
-}
-.why-go svg {
-  fill: none;
-  stroke: currentColor;
-  stroke-width: 2;
-  stroke-linecap: round;
-  stroke-linejoin: round;
 }
 .why-anchor + .why {
   scroll-margin-top: 12px;
@@ -4455,7 +4537,7 @@ button.odai-place::after {
   text-align: center;
 }
 .recap-entry {
-  margin-top: 10px;
+  margin-top: 12px;
 }
 .recap-entry .btn-line {
   width: 100%;

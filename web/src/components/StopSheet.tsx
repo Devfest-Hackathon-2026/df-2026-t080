@@ -23,8 +23,8 @@ import { StopOdai } from './Odai'
 import { Sheet } from './Sheet'
 import { StopWhy } from './StopWhy'
 import { Thumb } from './Thumb'
+import { finaleText } from './RouteList'
 import { tr } from '../lib/i18n'
-import { isEmpty, useTripWhy } from '../lib/why'
 import { PLACE_WORDS as W, searchName } from './placeWords'
 
 const ORD = ['th', 'st', 'nd', 'rd']
@@ -39,17 +39,16 @@ const T = tr({
     stay: '滞在',
     shorter: '滞在を5分短くする',
     longer: '滞在を5分長くする',
-    auto: 'おまかせに戻す',
-    closes: (t: string) => `${t}に閉まります（目安）。滞在を短くしてください。`,
+    autoStay: '自動に戻す',
+    closes: (t: string) => `${t}に営業終了（目安）。滞在を短くしてください。`,
     order: '順番',
-    up: '1つ前にする',
+    up: '1つ前へ移動',
     nth: (n: number) => `${n}番目`,
-    down: '1つ後にする',
+    down: '1つ後ろへ移動',
     reorder: 'スケジュールで並べ替える',
-    focus: 'この近くの場所を足す',
-    whyAdd: '選んだ理由を残す',
+    focus: 'この近くの場所を追加',
     byGemini: '特徴・注意点・混雑は Gemini の推定です。',
-    whySee: '選んだ理由を見る',
+    auto: 'おまかせで追加',
   },
   en: {
     span: (a: string, b: string) => `${a}–${b}`,
@@ -61,7 +60,7 @@ const T = tr({
     stay: 'Stay',
     shorter: '5 Minutes Shorter',
     longer: '5 Minutes Longer',
-    auto: 'Reset to Automatic',
+    autoStay: 'Reset to Automatic',
     closes: (t: string) => `Closes at ${t} (estimate). Please shorten your stay.`,
     order: 'Order',
     up: 'Move Up',
@@ -69,9 +68,8 @@ const T = tr({
     down: 'Move Down',
     reorder: 'Reorder in Schedule',
     focus: 'Add Places Nearby',
-    whyAdd: 'Add Your Reason',
     byGemini: 'About, Heads-Up, and Popular Times are estimates by Gemini.',
-    whySee: 'See Your Reason',
+    auto: 'Added for you',
   },
 })
 
@@ -96,6 +94,7 @@ type Props = {
   onReorder?: () => void // スケジュールの並べ替えを開く（場所の画面は閉じる）
   odaiCount: number
   whySince: number // この旅を作り始めた時刻（これより後に入れた理由とミッションだけを、この旅の物として出す）
+  auto?: boolean // 自分で選んでいない（おまかせで足した）場所
   askWhy?: boolean // 開いたらすぐ「選んだ理由」の欄へ送る（振り返りの画面から来たとき）。送ったら onAskWhy で知らせる
   onAskWhy?: () => void
 }
@@ -103,17 +102,14 @@ type Props = {
 // 滞在の長さの選択肢（15 分〜4 時間・15 分刻み）。細かい長さは −・＋ の 5 分ずつで
 const STAYS = Array.from({ length: 16 }, (_, i) => 15 + i * 15)
 
-export function StopSheet({ data, stop, index, plan, input, onClose, onPeek, onStay, onAutoStay, onRemove, onFocus, focused, fixed, date, planDate, onNotice, onMove, onReorder, odaiCount, whySince, askWhy = false, onAskWhy }: Props) {
+export function StopSheet({ data, stop, index, plan, input, onClose, onPeek, onStay, onAutoStay, onRemove, onFocus, focused, fixed, date, planDate, onNotice, onMove, onReorder, odaiCount, whySince, auto = false, askWhy = false, onAskWhy }: Props) {
   const s = stop.spot
   const alts = alternatives(data, stop, plan, input)
   const visitHour = Math.floor((stop.arrive + stop.stay / 2) / 60)
   // 組み直しの途中でも、選んだ長さをそのまま見せる
   const stay = input.stayFix[s.id] ?? stop.stay
   const place = usePlaceInfo(s, data.area)
-  // 「選んだ理由を残す」を押したら、シートを広げてから理由の欄まで送る
-  const { get: getWhy } = useTripWhy(data.area.name)
-  const why = getWhy(s.id)
-  const hasWhy = !!why && why.at >= whySince && !isEmpty(why)
+  // 振り返りの画面から理由を入れに来たときは、シートを広げてから理由の欄まで送る
   const [toWhy, setToWhy] = useState(0)
   const whyRef = useRef<HTMLDivElement>(null)
   useEffect(() => {
@@ -149,13 +145,15 @@ export function StopSheet({ data, stop, index, plan, input, onClose, onPeek, onS
             <span className="num">{T.span(fmt(stop.arrive), fmt(stop.depart))}</span>
           </span>
           {stop.estimated && <CrowdMark level={stop.level} word />}
+          {(stop.finale || auto) && (
+            <span className="lead-note">{[stop.finale && finaleText(stop, planDate), auto && T.auto].filter(Boolean).join(W.sep)}</span>
+          )}
         </span>
       }
       onClose={onClose}
       card
       grow={toWhy}
     >
-      <Button variant="ghost" className="why-go" label={hasWhy ? T.whySee : T.whyAdd} endContent={<Icon icon="chevronDown" />} onClick={() => setToWhy((n) => n + 1)} />
       <PlaceHero spot={s} place={place} priority />
       <PlaceFacts info={place.info} date={planDate} />
 
@@ -190,7 +188,7 @@ export function StopSheet({ data, stop, index, plan, input, onClose, onPeek, onS
             web={place.info?.mapsUri || mapsPlaceUrl(searchName(s), searchName(data.area))}
             app={mapsAppPlaceUrl(searchName(s), searchName(data.area))}
           >
-            {W.maps}
+            {s.kind === 'food' || s.kind === 'cafe' ? W.mapsMenu : W.maps}
           </MapsLink>
         </div>
         {s.verified === false && (
@@ -248,7 +246,7 @@ export function StopSheet({ data, stop, index, plan, input, onClose, onPeek, onS
           <IconButton size="lg" className="step" label={T.longer} icon={<span className="step-glyph">＋</span>} isDisabled={stay >= 240} onClick={() => onStay(s.id, stay + 5)} />
         </div>
         {fixed && (
-          <Button variant="ghost" className="stay-auto" label={T.auto} onClick={() => onAutoStay(s.id)} />
+          <Button variant="ghost" className="stay-auto" label={T.autoStay} onClick={() => onAutoStay(s.id)} />
         )}
         {stop.closeOver && (
           <p className="note warn num">

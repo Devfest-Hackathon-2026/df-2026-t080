@@ -55,5 +55,16 @@ class TransitTest(unittest.TestCase):
         self.assertEqual((r['minutes'], r['steps'][0]['minutes'], len(r['steps'])), (25, 0, 1))
 
 
+class Unfound(unittest.TestCase):
+    def test_only_missed_everywhere(self):
+        base = {'placeMiss': True, 'verified': False, 'source': 'hidden'}
+        self.assertTrue(places.unfound(base))
+        self.assertFalse(places.unfound({**base, 'verified': True}))          # 地図のデータで見つかった
+        self.assertFalse(places.unfound({'verified': False, 'source': 'hidden'}))  # Places でまだ探していない
+        self.assertFalse(places.unfound({'placeMiss': True, 'source': 'hidden'}))  # 地図のデータでまだ確かめていない
+        self.assertFalse(places.unfound({**base, 'source': 'famous'}))
+        self.assertFalse(places.unfound({**base, 'source': 'wish', 'named': True}))
+
+
 if __name__ == '__main__':
     unittest.main()

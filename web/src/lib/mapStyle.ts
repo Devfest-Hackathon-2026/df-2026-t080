@@ -1,12 +1,14 @@
 // Google マップの下地の見た目（明るい画面用・暗い画面用）。
 // 地図の上で目立つのはプランの線と札だけにする: 店や名所の印、駅の印、道路の名前と番号は出さない。
-// 位置の手がかりになる川・公園・線路だけを、色を抜いて薄く残す（市や区の名前も、札の名前とまぎらわしいので出さない）
+// 位置の手がかりになる川・公園・線路だけを残す。水は薄い青、公園・山・寺社の森は薄い緑、道と建物は灰と白（市や区の名前も、札の名前とまぎらわしいので出さない）。
+// 水と緑の色は MapLibre 版（components/MapView.tsx）も同じ値を使う
 type Rule = google.maps.MapTypeStyle
 
 type Tone = {
   land: string
   built: string
   park: string
+  wood: string
   water: string
   road: string
   arterial: string
@@ -21,8 +23,9 @@ type Tone = {
 const LIGHT: Tone = {
   land: '#eef1f4',
   built: '#e8ecf0',
-  park: '#e0e9df',
-  water: '#d2dfe8',
+  park: '#d3e8cf',
+  wood: '#dbe9d6',
+  water: '#bfd8ea',
   road: '#ffffff',
   arterial: '#ffffff',
   highway: '#ffffff',
@@ -36,8 +39,9 @@ const LIGHT: Tone = {
 const DARK: Tone = {
   land: '#141b23',
   built: '#171f28',
-  park: '#15221e',
-  water: '#0c1b26',
+  park: '#173022',
+  wood: '#162a20',
+  water: '#112c40',
   road: '#1e2832',
   arterial: '#243039',
   highway: '#2a3642',
@@ -61,8 +65,10 @@ function rules(t: Tone): Rule[] {
     { featureType: 'administrative.province', elementType: 'geometry.stroke', stylers: [{ visibility: 'on' }, { color: t.border }] },
     { featureType: 'landscape.man_made', elementType: 'geometry', stylers: [{ color: t.built }] },
     { featureType: 'landscape.natural', elementType: 'labels', stylers: [{ visibility: 'off' }] },
+    { featureType: 'landscape.natural.landcover', elementType: 'geometry', stylers: [{ color: t.wood }] },
     { featureType: 'poi', stylers: [{ visibility: 'off' }] },
     { featureType: 'poi.park', elementType: 'geometry', stylers: [{ visibility: 'on' }, { color: t.park }] },
+    { featureType: 'poi.place_of_worship', elementType: 'geometry', stylers: [{ visibility: 'on' }, { color: t.wood }] },
     { featureType: 'road', elementType: 'labels', stylers: [{ visibility: 'off' }] },
     { featureType: 'road', elementType: 'geometry.fill', stylers: [{ color: t.road }] },
     { featureType: 'road', elementType: 'geometry.stroke', stylers: [{ visibility: 'off' }] },
@@ -78,3 +84,7 @@ function rules(t: Tone): Rule[] {
 
 export const mapStyle = (dark: boolean): Rule[] => rules(dark ? DARK : LIGHT)
 export const mapLand = (dark: boolean) => (dark ? DARK : LIGHT).land
+export const mapTint = (dark: boolean) => {
+  const t = dark ? DARK : LIGHT
+  return { water: t.water, park: t.park, wood: t.wood }
+}

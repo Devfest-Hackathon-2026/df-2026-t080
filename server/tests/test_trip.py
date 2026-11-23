@@ -282,6 +282,78 @@ class RunTripTest(unittest.TestCase):
         self.assertTrue(saved and all(not places.in_area(dazaifu, d['area']) for d in saved))
 
 
+    def test_car_trip_reaches_far_named_wish(self):
+        okinawa = places.trip_point({'text': '沖縄市', 'name': '沖縄市', 'lat': 26.3344, 'lng': 127.8057})
+        churaumi = {'name': '沖縄美ら海水族館', 'kind': 'sight', 'role': 'famous', 'lat': 26.6943, 'lng': 127.8779, 'stay': 90,
+                    'open': '08:30', 'close': '18:30', 'why': '大きな水槽でジンベエザメを見られる。', 'tags': [], 'named': True}
+        prompts = []
+        real = fake_trip_llm.ask
+
+        def ask(prompt, model=''):
+            if prompt.startswith('次のエリアを 1 日で観光する人の希望'):
+                prompts.append(prompt)
+                return json.dumps({'conditions': [], 'places': [churaumi]}, ensure_ascii=False)
+            return real(prompt, model)
+
+        def run(car):
+            job = {'id': 'x', 'key': 'x', 'state': 'running', 'steps': [], 'done': 0, 'total': 0, 't0': time.time(), 'times': {}}
+            trip = places.trip_of(okinawa)
+            t = threading.Thread(target=app.run_job, args=(job, trip['area'], '美ら海水族館に行きたい', 'ja', trip, car))
+            t.start()
+            t.join(60)
+            self.assertEqual(job['state'], 'done', job.get('error'))
+            return job['result']
+        with mock.patch.object(app, 'llm', mock.Mock(wraps=fake_trip_llm, ask=ask)), mock.patch.object(app, 'prefetch_rail'):
+            before = len(fake_trip_llm.CALLS)
+            walk = run(False)
+            first = len(fake_trip_llm.CALLS) - before
+            car = run(True)
+            second = len(fake_trip_llm.CALLS) - before - first
+        self.assertNotIn('沖縄美ら海水族館', [p['name'] for p in walk['places']])
+        names = [p['name'] for p in car['places']]
+        self.assertIn('沖縄美ら海水族館', names)
+        far = next(p for p in car['places'] if p['name'] == '沖縄美ら海水族館')
+        self.assertTrue(places.in_area(far, car['area']))
+        self.assertIn(far['id'], car['matrix']['ids'])
+        # 車の旅は希望の頼みだけを頼み直す（エリアの候補は作り置きを使う）。頼みの文は車の範囲
+        self.assertEqual((first, second), (len(places.AREA_TASKS), 0))
+        self.assertEqual(len(prompts), 2)
+        self.assertIn('25 km ほど', prompts[0])
+        self.assertIn('車で片道 2 時間ほど', prompts[1])
+
+    def test_far_named_wish_is_reported(self):
+        hakata = places.trip_point({'text': '博多', 'name': '博多駅', 'lat': 33.5897, 'lng': 130.4207})
+        far = {'name': '別府の地獄めぐり', 'kind': 'sight', 'role': 'famous', 'lat': 33.3157, 'lng': 131.4722, 'stay': 60,
+               'open': '08:00', 'close': '17:00', 'why': '温泉が湧く。', 'tags': [], 'named': True}
+        loose = {**far, 'name': '湯布院の金鱗湖', 'named': False, 'lat': 33.2659, 'lng': 131.3690}
+        real = fake_trip_llm.ask
+
+        def ask(prompt, model=''):
+            if prompt.startswith('次のエリアを 1 日で観光する人の希望'):
+                return json.dumps({'conditions': [], 'places': [far, loose]}, ensure_ascii=False)
+            return real(prompt, model)
+        with mock.patch.object(app, 'llm', mock.Mock(wraps=fake_trip_llm, ask=ask)):
+            r = self.run_trip(places.trip_of(hakata), '別府の地獄めぐりに行きたい')
+            again = self.run_trip(places.trip_of(hakata), '別府の地獄めぐりに行きたい')
+        self.assertNotIn('別府の地獄めぐり', [p['name'] for p in r['places']])
+        self.assertEqual(r.get('far'), ['別府の地獄めぐり'])
+        self.assertEqual(again.get('far'), ['別府の地獄めぐり'])
+        plain = self.run_trip(places.trip_of(hakata))
+        self.assertNotIn('far', plain)
+
+    def test_car_trip_does_not_fetch_rail(self):
+        job = {'id': 'x', 'key': 'x', 'state': 'running', 'steps': [], 'done': 0, 'total': 0, 't0': time.time(), 'times': {}}
+        trip = places.trip_of(ICHIGAYA, IIDABASHI)
+        with mock.patch.object(app, 'prefetch_rail', side_effect=AssertionError('車の旅は電車の路線を取らない')):
+            t = threading.Thread(target=app.run_job, args=(job, trip['area'], '', 'ja', trip, True))
+            t.start()
+            t.join(60)
+        self.assertEqual(job['state'], 'done', job.get('error'))
+        with mock.patch.object(app, 'prefetch_rail') as rail:
+            self.run_trip(places.trip_of(ICHIGAYA))
+        self.assertEqual(rail.call_count, 1)
+
+
 
 class SampleTripTest(unittest.TestCase):
     """京都駅から出て京都駅に戻る旅は、例のプラン（sample.json）の候補と移動の表を使い、Gemini も OSRM も呼ばない"""

@@ -13,8 +13,8 @@ import { laneGap } from './routeLanes'
 import { KIND_ICON, type SpotKind } from './kindIcon'
 
 const WORD = tr({
-  ja: { cand: (n: string) => `候補: ${n}`, walk: '徒歩', transit: '電車・バス', bus: 'バス', train: '電車', other: '乗り物', me: '現在地', off: (n: string) => `${n}で降りる` },
-  en: { cand: (n: string) => `Option: ${n}`, walk: 'Walk', transit: 'Transit', bus: 'Bus', train: 'Train', other: 'Other', me: 'My Location', off: (n: string) => `Get off: ${n}` },
+  ja: { cand: (n: string) => `候補: ${n}`, walk: '徒歩', car: '車', transit: '電車・バス', bus: 'バス', train: '電車', other: '乗り物', me: '現在地', off: (n: string) => `${n}で降りる` },
+  en: { cand: (n: string) => `Option: ${n}`, walk: 'Walk', car: 'Drive', transit: 'Transit', bus: 'Bus', train: 'Train', other: 'Other', me: 'My Location', off: (n: string) => `Get off: ${n}` },
 })
 
 export type Pt = { x: number; y: number }
@@ -29,7 +29,7 @@ export type LayerData = {
   stops: { id: string; name: string; ll: LL }[]
   // idx: 0 が出発地から 1 番目へ、stops.length が最後の場所から到着地（無ければ出発地）へ。pieces: 歩く所と乗る所（便か乗換を入れた区間だけ）。
   // lane: 線を横にずらして描いている車線（lib/routeLanes。正は進む向きの右）。札も同じだけずらす
-  legs: { coords: LL[]; mode: 'walk' | 'transit'; minutes: number; idx: number; pieces?: Piece[] | null; lane?: number }[]
+  legs: { coords: LL[]; mode: 'walk' | 'transit' | 'car'; minutes: number; idx: number; pieces?: Piece[] | null; lane?: number }[]
   // kind: 場所の種類（印の形）。picked: 行きたい場所に選んである候補（印を浅葱にする）。named: 拡大していなくても名前を出す候補
   cands: { id: string; name: string; ll: LL; kind: SpotKind; picked?: boolean; named?: boolean }[]
   // この付近で検索の結果（Google の地図のときだけ。押すと onFound）
@@ -70,13 +70,14 @@ const STN_OFF = 13 // 降りる駅の印の一辺（降りてから歩く所を�
 const TRY_ALONG = [0.5, 0.44, 0.56, 0.38, 0.62, 0.32, 0.68, 0.26, 0.74, 0.2, 0.8, 0.14, 0.86]
 
 // 所要時間の札のアイコン。形の出典: Material Icons（https://fonts.google.com/icons?icon.set=Material+Icons）の
-// directions_walk・directions_transit・train。Apache License 2.0（https://github.com/google/material-design-icons）。著作権は Google
+// directions_walk・directions_transit・train・directions_car。Apache License 2.0（https://github.com/google/material-design-icons）。著作権は Google
 const ICON = {
   walk: 'M13.5 5.5c1.1 0 2-.9 2-2s-.9-2-2-2-2 .9-2 2 .9 2 2 2zM9.8 8.9L7 23h2.1l1.8-8 2.1 2v6h2v-7.5l-2.1-2 .6-3C14.8 12 16.8 13 19 13v-2c-1.9 0-3.5-1-4.3-2.4l-1-1.6c-.4-.6-1-1-1.7-1-.3 0-.5.1-.8.1L6 8.3V13h2V9.6l1.8-.7',
   transit:
     'M12 2c-4.42 0-8 .5-8 4v9.5C4 17.43 5.57 19 7.5 19L6 20.5v.5h12v-.5L16.5 19c1.93 0 3.5-1.57 3.5-3.5V6c0-3.5-3.58-4-8-4zM7.5 17c-.83 0-1.5-.67-1.5-1.5S6.67 14 7.5 14s1.5.67 1.5 1.5S8.33 17 7.5 17zm3.5-6H6V6h5v5zm5.5 6c-.83 0-1.5-.67-1.5-1.5s.67-1.5 1.5-1.5 1.5.67 1.5 1.5-.67 1.5-1.5 1.5zm1.5-6h-5V6h5v5z',
   train:
     'M12 2c-4 0-8 .5-8 4v9.5C4 17.43 5.57 19 7.5 19L6 20.5v.5h2.23l2-2H14l2 2h2v-.5L16.5 19c1.93 0 3.5-1.57 3.5-3.5V6c0-3.5-3.58-4-8-4zM7.5 17c-.83 0-1.5-.67-1.5-1.5S6.67 14 7.5 14s1.5.67 1.5 1.5S8.33 17 7.5 17zm3.5-7H6V6h5v4zm2 0V6h5v4h-5zm3.5 7c-.83 0-1.5-.67-1.5-1.5s.67-1.5 1.5-1.5 1.5.67 1.5 1.5-.67 1.5-1.5 1.5z',
+  car: 'M18.92 6.01C18.72 5.42 18.16 5 17.5 5h-11c-.66 0-1.21.42-1.42 1.01L3 12v8c0 .55.45 1 1 1h1c.55 0 1-.45 1-1v-1h12v1c0 .55.45 1 1 1h1c.55 0 1-.45 1-1v-8l-2.08-5.99zM6.5 16c-.83 0-1.5-.67-1.5-1.5S5.67 13 6.5 13s1.5.67 1.5 1.5S7.33 16 6.5 16zm11 0c-.83 0-1.5-.67-1.5-1.5s.67-1.5 1.5-1.5 1.5.67 1.5 1.5-.67 1.5-1.5 1.5zM5 11l1.5-4.5h11L19 11H5z',
 }
 
 export const durText = (min: number) => fmtDur(Math.max(1, Math.round(min)))
@@ -402,7 +403,7 @@ export class MapLayer {
     this.root.append(...this.stations.map((s) => s.mark))
     this.legs = d.legs.map((l) => {
       const e = div('leg-badge')
-      e.setAttribute('aria-label', `${l.mode === 'walk' ? WORD.walk : WORD.transit} ${durText(l.minutes)}`)
+      e.setAttribute('aria-label', `${WORD[l.mode]} ${durText(l.minutes)}`)
       const t = document.createElement('span')
       t.textContent = durText(l.minutes)
       e.append(icon(l.mode), t)

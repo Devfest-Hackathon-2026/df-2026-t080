@@ -1,4 +1,4 @@
-// 乗り物の小さな線のアイコン（文字の頭に付ける）。形の出典: Lucide（https://lucide.dev）の bus・train-front・footprints。
+// 乗り物の小さな線のアイコン（文字の頭に付ける）。形の出典: Lucide（https://lucide.dev）の bus・train-front・footprints・car。
 // ISC ライセンス（https://lucide.dev/license）。著作権は Lucide Contributors にある
 import { MODE_SHAPE, type Mode } from '../lib/modeShape'
 

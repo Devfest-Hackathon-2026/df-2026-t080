@@ -34,7 +34,7 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm typecheck
       - run: pnpm build
-      - run: node --test tests/geo-cutoff.test.mjs
+      - run: node --test tests/geo-cutoff.test.mjs tests/line-edge.test.mjs tests/photo-load.test.mjs tests/quiet-hint.test.mjs
 
   server:
     name: server（構文の確認と試験）

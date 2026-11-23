@@ -8,7 +8,8 @@ import 'maplibre-gl/dist/maplibre-gl.css'
 import workerUrl from 'maplibre-gl/dist/maplibre-gl-worker.mjs?url'
 import { tr } from '../lib/i18n'
 import { MapLayer, fitPad, keepOutOf, litOf, sheetCover, type Projector } from '../lib/mapLayer'
-import { lineEdge } from '../lib/lineColor'
+import { lineEdge, lineEdgeGrow } from '../lib/lineColor'
+import { mapTint } from '../lib/mapStyle'
 import { LANE_STOPS, laneGap, lanesOf, shiftLine } from '../lib/routeLanes'
 import { WALK_BACK, WALK_DOT, WALK_EDGE, WALK_STEP, along } from '../lib/walkDots'
 import { MapTools } from './MapTools'
@@ -37,6 +38,16 @@ function hideBaseLabels(m: MlMap) {
   for (const l of m.getStyle().layers ?? []) if (l.type === 'symbol') m.setLayoutProperty(l.id, 'visibility', 'none')
 }
 
+// 水と緑の色を Google マップ版（lib/mapStyle.ts）にそろえる。道と建物は下地のまま
+const TINT_FILL: Record<string, 'water' | 'park' | 'wood'> = { water: 'water', park: 'park', landuse_park: 'park', landcover_wood: 'wood' }
+function tintBase(m: MlMap, dark: boolean) {
+  const t = mapTint(dark)
+  for (const l of m.getStyle().layers ?? []) {
+    if (l.type === 'fill' && TINT_FILL[l.id]) m.setPaintProperty(l.id, 'fill-color', t[TINT_FILL[l.id]])
+    if (l.type === 'line' && l.id === 'waterway') m.setPaintProperty(l.id, 'line-color', t.water)
+  }
+}
+
 // この地図に出す場所の位置。Places で照合した場所は、照合の前の位置（guess）にする。
 // Places の位置は Google の地図と一緒にしか出せない（lib/planImage の ownPlace と同じ考え。移動時間の計算は照合した位置のまま）
 const ownLL = (s: Spot): LL => (Array.isArray(s.guess) && s.guess.length === 2 ? [s.guess[1], s.guess[0]] : [s.lng, s.lat])
@@ -44,7 +55,7 @@ const ownLL = (s: Spot): LL => (Array.isArray(s.guess) && s.guess.length === 2 ?
 const FIT_PAD = { top: 48, bottom: 44, left: 44, right: 64 }
 const FOCUS_PAD = { top: 56, left: 56, right: 76, bottom: 76 }
 
-export function MapView({ data, plan, focusId, candidates, candId = null, showId = null, legIdx = null, buses = NO_BUSES, picked = NO_PICKS, changed, onOpen, onCandidate, onLeg }: MapProps) {
+export function MapView({ data, plan, focusId, candidates, candId = null, showId = null, legIdx = null, buses = NO_BUSES, picked = NO_PICKS, changed, onOpen, onCandidate, onLeg, car }: MapProps) {
   const box = useRef<HTMLDivElement>(null)
   const map = useRef<MlMap | null>(null)
   const layer = useRef<MapLayer | null>(null)
@@ -141,11 +152,11 @@ export function MapView({ data, plan, focusId, candidates, candId = null, showId
         const dim = lit.legLit(s.idx) ? 0 : 1
         const isBack = s.idx === back ? 1 : 0
         const base = { dim, back: isBack, op: dim ? 0.2 : isBack && !lit.any ? 0.55 : 1, order: dim || isBack ? 0 : 1, lane: lane[k] }
-        if (!s.pieces) return [line(s.coords, { ...base, mode: s.exact ? s.mode : 'pending' })]
+        if (!s.pieces) return [line(s.coords, { ...base, mode: s.exact ? (s.mode === 'car' ? 'transit' : s.mode) : 'pending' })]
         return s.pieces.map((p) => {
           if (p.kind === 'walk') return line(p.coords, { ...base, mode: 'walk' })
           const color = p.color ?? tint
-          return line(p.coords, { ...base, mode: 'ride', color, edge: lineEdge(color, dark, land) })
+          return line(p.coords, { ...base, mode: 'ride', color, edge: lineEdge(color, dark, land), grow: lineEdgeGrow(color, dark, land) })
         })
       }),
     }
@@ -183,7 +194,7 @@ export function MapView({ data, plan, focusId, candidates, candId = null, showId
       source: 'route',
       filter: ['==', ['get', 'mode'], 'ride'],
       layout: { 'line-cap': 'round', 'line-join': 'round', 'line-sort-key': ['get', 'order'] },
-      paint: { 'line-color': ['get', 'edge'], 'line-width': wide(6, 7), 'line-opacity': op, 'line-offset': off },
+      paint: { 'line-color': ['get', 'edge'], 'line-width': ['+', wide(6, 7), ['get', 'grow']], 'line-opacity': op, 'line-offset': off },
     })
     m.addLayer({
       id: 'route-ride',
@@ -298,6 +309,7 @@ export function MapView({ data, plan, focusId, candidates, candId = null, showId
     m.on('style.load', () => {
       ready.current = true
       hideBaseLabels(m)
+      tintBase(m, mq().matches)
       matchLand(m)
       drawLines()
       L.draw()
@@ -650,7 +662,7 @@ export function MapView({ data, plan, focusId, candidates, candId = null, showId
       <RouteWait on={routing} />
       <div className="map-dock" style={dockStyle} data-hidden={dockHidden ? '' : undefined}>
         <div className="map-dock-row">
-          {hasPlan ? <MapLegend cands={candidates.length > 0} /> : <span />}
+          {hasPlan ? <MapLegend cands={candidates.length > 0} car={!!car} /> : <span />}
           <MapTools
             locating={locating}
             fitLabel={plan && plan.stops.length > 0 ? MAPW.fitPlan : MAPW.fitAll}

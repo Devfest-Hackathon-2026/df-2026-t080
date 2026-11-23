@@ -13,7 +13,7 @@ export function StopWhy({ area, spot, since, onNotice }: { area: string; spot: S
   const [stored, setStored] = useState(false)
   const change = (v: WhyDraft) => {
     const ok = put({ spotId: spot.id, spotName: spot.name, chips: v.chips, text: v.text, downsideSeen: saved?.downsideSeen ?? spot.downside, hit: saved?.hit, at: saved?.at ?? Date.now() })
-    if (!ok) onNotice(tr({ ja: '端末の空きが足りないため、理由を保存できませんでした', en: 'Not enough storage to save your reason' }))
+    if (!ok) onNotice(tr({ ja: 'デバイスの空き領域が不足しているため、理由を保存できませんでした', en: 'Not enough storage to save your reason' }))
     setStored(ok)
   }
   return <WhyField value={value} onChange={change} status={stored ? WHY_SAVED : ''} />

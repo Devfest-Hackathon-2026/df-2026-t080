@@ -44,11 +44,13 @@ export function peakRange(s: Spot, day: Day): string | null {
 }
 
 // 候補の一覧に添える、空いている時間帯の一言（その日の推定から。開いている時間だけを見て、サーバーが埋めた時間帯は使わない）
-export function quietHint(s: Spot, day: Day): string | null {
+// span: 旅の出発と帰りの時刻（0 時からの分）。あるときは、その間の時間だけで言う（10 時に出る旅に「朝が空いています」、18 時に帰る旅に「18時から空きます」と、行けない時間を勧めない）
+export function quietHint(s: Spot, day: Day, span?: { start: number; end: number }): string | null {
   const shut = s.close <= s.open
   const known = hourly(s, day)
     .map((v, i) => ({ h: i + FIRST_HOUR, v, i }))
     .filter(({ h, i }) => !s.filled?.crowd?.includes(i) && (shut || (h * 60 < s.close && (h + 1) * 60 > s.open)))
+    .filter(({ h }) => !span || (h * 60 < span.end && (h + 1) * 60 > span.start))
   if (!known.length) return null
   if (known.every((k) => k.v <= 1)) return tr({ ja: '一日空いています', en: 'Quiet all day' })
   const morning = known[0].v <= 1 ? known[0].h : null

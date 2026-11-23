@@ -36,34 +36,38 @@ const T = tr({
       { key: 'cafe', label: 'カフェ' },
     ] as { key: Tab; label: string }[],
     slot: { sight: '', lunch: '昼食', dinner: '夕食', cafe: '休憩' } as Record<Slot, string>,
-    one: { sight: '', food: '昼食と夕食を1か所ずつ選べます。それより多く選ぶと入れ替わります。', cafe: 'カフェは1か所です。選ぶと入れ替わります。' } as Record<Tab, string>,
+    one: { sight: '', food: '昼食と夕食は1か所ずつです。別の店を選択すると入れ替わります。', cafe: 'カフェは1か所です。別の店を選択すると入れ替わります。' } as Record<Tab, string>,
     loading: '候補を読み込んでいます……',
     famous: '人気スポット',
     hidden: '隠れた名所',
     wish: '希望に合う場所',
-    changed: (slot: string, name: string) => `${slot}を${name}に変更しました`,
+    changed: (slot: string, from: string, to: string) => `${slot}は1か所です。「${from}」を「${to}」に変更しました`,
     sep: '・',
     otherArea: '場所と日付を変更',
-    own: '自分の旅を作る',
+    own: '自分の旅を作成',
     exTitle: (a: string) => `今は${a}の例です。`,
     example: '（例）',
     intro: '行く時間をずらして、混雑を避ける1日のプランを組みます。',
-    lead: '行きたい場所を選んでください',
+    lead: '行きたい場所を選択してください',
     none: '候補が見つかりませんでした',
-    byGemini: '候補は Gemini が集めました。',
+    byGemini: '候補は Gemini が作成しました。',
     more: (n: number) => `あと${n}か所を表示`,
     kind: '種類',
     count: (n: number) => `${n}か所`,
-    make: 'この場所でプランを作る',
-    addMore: '空いた時間にほかの場所も足す',
-    auto: 'おまかせで作る',
+    picking: (n: number) => `${n}か所を選択中`,
+    make: 'この場所でプランを作成',
+    addMore: '空いた時間にほかの場所も追加',
+    mealNote: '選択していない食事は自動で追加されます。',
+    auto: 'おまかせで作成',
     fit: (w: string) => `希望の「${w}」に合う`,
     add: '追加',
     on: '選択中',
-    named: '希望に書いた場所',
+    named: '希望に入力した場所',
     ask: '選んだ理由（任意）',
     askOf: (n: string) => `${n}を選んだ理由（任意）`,
     skip: 'スキップ',
+    dayOf: (n: number, d: string) => `${n}日目　${d}`,
+    over: (n: number) => `入りきらない場所は、${n}日目以降に回します。`,
   },
   en: {
     tabs: [
@@ -77,7 +81,7 @@ const T = tr({
     famous: 'Popular Spots',
     hidden: 'Hidden Gems',
     wish: 'Matching Your Wish',
-    changed: (slot: string, name: string) => `Changed ${slot.toLowerCase()} to ${name}`,
+    changed: (slot: string, from: string, to: string) => `One ${slot.toLowerCase()} place per plan. Replaced ${from} with ${to}.`,
     sep: ' · ',
     otherArea: 'Change Place & Date',
     own: 'Plan Your Trip',
@@ -90,8 +94,10 @@ const T = tr({
     more: (n: number) => `Show ${n} More`,
     kind: 'Type',
     count: (n: number) => `${n} ${n === 1 ? 'place' : 'places'}`,
+    picking: (n: number) => `${n} Selected`,
     make: 'Plan with These Places',
     addMore: 'Also add other places to free time',
+    mealNote: "Meals you haven't picked are added automatically.",
     auto: 'Plan It for Me',
     fit: (w: string) => `Matches “${w}”`,
     add: 'Add',
@@ -100,12 +106,24 @@ const T = tr({
     ask: 'Your Reason (Optional)',
     askOf: (n: string) => `Your reason for ${n} (optional)`,
     skip: 'Skip',
+    dayOf: (n: number, d: string) => `Day ${n} · ${d}`,
+    over: (n: number) => `Places that don’t fit will move to Day ${n} or later.`,
   },
 })
 const TABS = T.tabs
 const SLOT_LABEL = T.slot
 // 塊ごとに最初に見せる候補の数（残りは「あと N か所を表示」で出す。選んだ候補はいつも出す）
 const FIRST = 4
+
+// 空いている時間帯の一言の頭に付ける時計の印。形の出典: Lucide（https://lucide.dev）の clock。ISC ライセンス（https://lucide.dev/license）。著作権は Lucide Contributors にある
+function QuietIcon() {
+  return (
+    <svg className="sp-quiet-icon" viewBox="0 0 24 24" width="13" height="13" aria-hidden="true">
+      <circle cx="12" cy="12" r="10" />
+      <path d="M12 6v6l4 2" />
+    </svg>
+  )
+}
 const kindOf = (s: Spot): Tab => (s.kind === 'food' ? 'food' : s.kind === 'cafe' ? 'cafe' : 'sight')
 
 // 食事は、昼だけ開く店は昼食、夜だけ開く店は夕食。両方開く店は昼食に入れ、昼食を選んであって夕食が空いていれば夕食にする
@@ -120,11 +138,12 @@ function slotOf(s: Spot, picks: Picked[]): Slot {
   return 'lunch'
 }
 
-// 希望に名前を書いた場所のうち、まだ選んでいない物を選んだ形にして足す（食事・休憩の枠に選んである店は入れ替えない）
-function withNamed(spots: Spot[], picks: Picked[], skip: Set<string>): Picked[] {
+// 希望に名前を書いた場所と、前の日までに入りきらなかった場所（chosen）のうち、まだ選んでいない物を選んだ形にして足す
+// （食事・休憩の枠に選んである店は入れ替えない）
+function withNamed(spots: Spot[], picks: Picked[], skip: Set<string>, chosen: Set<string>): Picked[] {
   let out = picks
   for (const s of spots) {
-    if (!s.named || s.source !== 'wish' || skip.has(s.id) || out.some((p) => p.id === s.id)) continue
+    if (!((s.named && s.source === 'wish') || chosen.has(s.id)) || skip.has(s.id) || out.some((p) => p.id === s.id)) continue
     const slot = slotOf(s, out)
     if (slot !== 'sight' && out.some((p) => p.slot === slot)) continue
     out = [...out, { id: s.id, slot }]
@@ -139,18 +158,30 @@ type Props = {
   date: string // YYYY-MM-DD
   // 候補を集めている途中の知らせ（無いときは空）
   note: string
-  // 選んだ場所でプランを組む（何も選ばずに「おまかせで作る」ときは、どちらも空）。since: この画面を開いた時刻（これより後に入れた理由が、この旅の理由）
+  // 選んだ場所でプランを組む（何も選ばずに「おまかせで作成」ときは、どちらも空）。since: この画面を開いた時刻（これより後に入れた理由が、この旅の理由）
   onDone: (data: AreaData, must: string[], pinned: Picked[], since: number, opts: { fill: boolean; start?: number; end?: number; example?: boolean }) => void
   // 自分の旅（ホーム画面）へ戻る。見出しにいつも出す
   onHome: () => void
+  // 見出しの戻るボタンの戻る先が、ホーム画面ではないとき（旅に次の日を加えるときのプラン）。このときは「エリアを変更」を見出しに出さない
+  back?: { label: string; aria: string }
+  // 見出しに見せる題（無ければエリアの名前）
+  title?: string
   // ほかのエリアで作る（入力の画面を開く）
   onOtherArea: () => void
+  // 泊まりの旅の何日目か（日帰りは無し）
+  dayNo?: number
+  // 旅の出発と帰りの時刻（0 時からの分）。空いている時間帯の一言を、この間の時間だけで言う
+  span?: { start: number; end: number }
+  // 最初から選んでおく候補（前の日までに入りきらなかった場所）
+  chosen?: string[]
+  // その日の出発から観光を終えるまでの分と、入りきらない場所を回す次の日（最終日と日帰りは無し）
+  room?: { minutes: number; next: number }
   // 例のエリアを読み込めなかった
   onFail: () => void
 }
 
 // 最初の画面。エリアの地図と候補だけを出し、行きたい場所を選んでからプランを組む
-export function StartPick({ map, area, date, note, onDone, onHome, onOtherArea, onFail }: Props) {
+export function StartPick({ map, area, date, note, onDone, onHome, back, title, onOtherArea, onFail, dayNo, chosen, room, span }: Props) {
   const [sample, setSample] = useState<AreaData | null>(null)
   const data = area ?? sample
   useEffect(() => {
@@ -168,7 +199,7 @@ export function StartPick({ map, area, date, note, onDone, onHome, onOtherArea, 
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
   if (!data) return <Loading />
-  return <Picking data={data} example={!area} map={map} date={date} note={note} onDone={onDone} onHome={onHome} onOtherArea={onOtherArea} />
+  return <Picking data={data} example={!area} map={map} date={date} note={note} onDone={onDone} onHome={onHome} back={back} title={title} onOtherArea={onOtherArea} dayNo={dayNo} chosen={chosen} room={room} span={span} />
 }
 
 function Loading() {
@@ -183,21 +214,44 @@ function Loading() {
   )
 }
 
-// example: 例のエリア（京都）を出している。見出しに「例」を添え、右上は自分の旅を作る入口にする
-function Picking({ data, example, map: MapPart, date, note: progress, onDone, onHome, onOtherArea }: Omit<Props, 'onFail' | 'area'> & { data: AreaData; example: boolean }) {
+// example: 例のエリア（京都）を出している。見出しに「例」を添え、右上は自分の旅を作成入口にする
+// 選んだ場所を回る時間のざっくりした目安（分）。滞在の合計に、出発地から近い順に回って到着地へ行く直線の距離を
+// 時速 20km で動き、区間ごとに 10 分の乗り換え・待ちを足す
+function roughMinutes(data: AreaData, spots: Spot[]): number {
+  const stay = spots.reduce((n, s) => n + s.stay, 0)
+  let at: { lat: number; lng: number } = data.start
+  let km = 0
+  const left = spots.slice()
+  while (left.length) {
+    let k = 0
+    for (let j = 1; j < left.length; j++) if (distM(at, left[j]) < distM(at, left[k])) k = j
+    km += distM(at, left[k]) / 1000
+    at = left[k]
+    left.splice(k, 1)
+  }
+  km += distM(at, data.end ?? data.start) / 1000
+  return stay + km * 3 + (spots.length + 1) * 10
+}
+
+function Picking({ data, example, map: MapPart, date, note: progress, onDone, onHome, back, title, onOtherArea, dayNo, chosen: chosenIds, room, span }: Omit<Props, 'onFail' | 'area'> & { data: AreaData; example: boolean }) {
   const day = isHoliday(date) ? 'holiday' : 'weekday'
+  // 空いている時間帯の一言を言う範囲（例のプランは、例の出発と帰りの時刻）
+  const hours = data.example?.end !== undefined ? { start: data.example.start, end: data.example.end } : span
   const [tab, setTab] = useState<Tab>('sight')
   // 希望に名前を書いた場所は、最初から選んでおく（届くたびに足す。一度選んだ物は、外したあと選び直さない）
   const offered = useRef(new Set<string>())
-  const [picks, setPicks] = useState<Picked[]>(() => (example ? [] : withNamed(data.places, [], offered.current)))
+  const chosenKey = (chosenIds ?? []).join('|')
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const chosen = useMemo(() => new Set(chosenIds ?? []), [chosenKey])
+  const [picks, setPicks] = useState<Picked[]>(() => (example ? [] : withNamed(data.places, [], offered.current, chosen)))
   const [addMore, setAddMore] = useState(false)
   useEffect(() => {
     for (const p of picks) offered.current.add(p.id)
   }, [picks])
   useEffect(() => {
     if (example) return
-    setPicks((cur) => withNamed(data.places, cur, offered.current))
-  }, [data, example])
+    setPicks((cur) => withNamed(data.places, cur, offered.current, chosen))
+  }, [data, example, chosen])
   const [candId, setCandId] = useState<string | null>(null)
   const [toast, setToast] = useState<{ id: number; text: string } | null>(null)
   // 全部を出した塊（札と見出しの組み）と、出したあとに読み上げとキーボードの位置を移す候補
@@ -219,7 +273,7 @@ function Picking({ data, example, map: MapPart, date, note: progress, onDone, on
 
   useEffect(() => {
     if (!toast) return
-    const t = window.setTimeout(() => setToast(null), 3500)
+    const t = window.setTimeout(() => setToast(null), 5000)
     return () => window.clearTimeout(t)
   }, [toast])
 
@@ -229,7 +283,7 @@ function Picking({ data, example, map: MapPart, date, note: progress, onDone, on
   const noWish = !!data.query && !(data.query.wish ?? '').trim()
   const isWish = (p: Spot) => p.source === 'wish' && !noWish
   const groups = useMemo(() => {
-    const all = (t: Tab) => data.places.filter((p) => kindOf(p) === t).sort((a, b) => (b.popularity ?? 0) - (a.popularity ?? 0))
+    const all = (t: Tab) => data.places.filter((p) => kindOf(p) === t && (!p.unfound || picks.some((x) => x.id === p.id))).sort((a, b) => (b.popularity ?? 0) - (a.popularity ?? 0))
     const wished = (t: Tab) => all(t).filter(isWish).sort((a, b) => Number(!!b.named) - Number(!!a.named))
     // 希望から来た場所のほかは、人気が高く、出発地（到着地）から近い物を先に（1 km 離れるごとに人気を 0.5 下げ、3 まで）
     const ends = [data.start, ...(data.end ? [data.end] : [])]
@@ -256,7 +310,7 @@ function Picking({ data, example, map: MapPart, date, note: progress, onDone, on
         ['', of('cafe')],
       ],
     } as Record<Tab, [string, Spot[]][]>
-  }, [data])
+  }, [data, picks])
 
   const hintOf = (title: string) => data.themes?.find((t) => t.label === title)?.hint ?? ''
   const picked = new Map(picks.map((p) => [p.id, p]))
@@ -268,7 +322,7 @@ function Picking({ data, example, map: MapPart, date, note: progress, onDone, on
     // 食事・休憩は 1 か所ずつ。同じ枠に選んであった店と入れ替える
     const old = slot === 'sight' ? undefined : picks.find((p) => p.slot === slot)
     setPicks([...picks.filter((p) => p !== old), { id, slot }])
-    if (old) setToast({ id: Date.now(), text: T.changed(SLOT_LABEL[slot], s.name) })
+    if (old) setToast({ id: Date.now(), text: T.changed(SLOT_LABEL[slot], byId.get(old.id)?.name ?? '', s.name) })
   }
   const drop = (id: string) => {
     setPicks(picks.filter((p) => p.id !== id))
@@ -296,7 +350,7 @@ function Picking({ data, example, map: MapPart, date, note: progress, onDone, on
     return w && w.at >= since ? [...w.chips, w.text.trim()].filter(Boolean).join(T.sep) : ''
   }
   // プランの画面は、地図が見える一番上から
-  // 選んだ場所があるときは、選んだ場所と食事だけで組む（「空いた時間にほかの場所も足す」を選んだときだけ足す）
+  // 選んだ場所があるときは、選んだ場所と食事だけで組む（「空いた時間にほかの場所も追加」を選んだときだけ足す）
   const done = (list: Picked[], more = list.length === 0 || addMore, at?: { start: number; end?: number; example: true }) => {
     window.scrollTo(0, 0)
     onDone(
@@ -320,8 +374,10 @@ function Picking({ data, example, map: MapPart, date, note: progress, onDone, on
 
   const cand = candId ? (byId.get(candId) ?? null) : null
   const pickedNames = picks.map((p) => byId.get(p.id)?.name).filter((x): x is string => !!x)
-  // 最初から選んであった場所（希望に名前を書いた場所）だけなら、まだ自分では選んでいないので「おまかせで作る」
-  const chose = picks.some((p) => !byId.get(p.id)?.named)
+  // 最初から選んであった場所（希望に名前を書いた場所）だけなら、まだ自分では選んでいないので「おまかせで作成」
+  const chose = picks.some((p) => !byId.get(p.id)?.named && !chosen.has(p.id))
+  // 選んだ場所の滞在と移動の目安が、その日の出発から観光を終えるまでに収まらないか
+  const over = !!room && roughMinutes(data, picks.flatMap((p) => byId.get(p.id) ?? [])) > room.minutes
   // 候補を集め終えて 1 件も無いときは、見出しと一覧の代わりに一言と「エリアを変更」を出す
   const none = data.places.length === 0 && !progress
   const shown = groups[tab].filter(([, items]) => items.length > 0)
@@ -331,19 +387,23 @@ function Picking({ data, example, map: MapPart, date, note: progress, onDone, on
   return (
     <div className="plan-view start-pick">
       <header className="top">
-        <HomeButton onClick={onHome} />
+        <HomeButton onClick={onHome} to={back} />
         <div className="top-title">
           <Heading level={1} maxLines={1} hasTruncateTooltip={false}>
-            {data.area.name}
+            {title ?? data.area.name}
             {example && <span className="top-ex">{T.example}</span>}
           </Heading>
           <Text as="p" display="block" type="supporting">
-            <span className="num">{dateLabel(date)}</span>
+            <span className="num">{dayNo ? T.dayOf(dayNo, dateLabel(date)) : dateLabel(date)}</span>
           </Text>
         </div>
         <div className="top-actions stack">
-          {!example && <Button variant="ghost" label={T.otherArea} onClick={onOtherArea} />}
+          {!example && !back && <Button variant="ghost" label={T.otherArea} onClick={onOtherArea} />}
         </div>
+        <p className="sp-picked" role="status" hidden={picks.length === 0}>
+          <span className="num">{T.picking(picks.length)}</span>
+          <span className="sp-names">{pickedNames.join(T.sep)}</span>
+        </p>
       </header>
 
       <div className="map-pane">
@@ -426,7 +486,7 @@ function Picking({ data, example, map: MapPart, date, note: progress, onDone, on
                 const p = picked.get(s.id)
                 const why = p ? reasonOf(s.id) : ''
                 const slot = p ? SLOT_LABEL[p.slot] : ''
-                const quiet = quietHint(s, day)
+                const quiet = quietHint(s, day, hours)
                 const fit = why ? '' : fitOf(s)
                 const asking = !!p && ask === s.id && !cand
                 return (
@@ -435,7 +495,7 @@ function Picking({ data, example, map: MapPart, date, note: progress, onDone, on
                       <Item
                         as="span"
                         className="pick-item"
-                        startContent={<Thumb spot={s} />}
+                        startContent={<Thumb spot={s} ask={!data.example} />}
                         label={
                           <span className="pick-name">
                             {s.name}
@@ -448,7 +508,12 @@ function Picking({ data, example, map: MapPart, date, note: progress, onDone, on
                               <span className="sp-meta">
                                 {!why && s.district && <span className="sp-district">{s.district}</span>}
                                 {!why && s.district && quiet && <span className="sp-sep">{T.sep}</span>}
-                                {quiet && <span className="sp-quiet">{quiet}</span>}
+                                {quiet && (
+                                  <span className="sp-quiet">
+                                    <QuietIcon />
+                                    {quiet}
+                                  </span>
+                                )}
                               </span>
                             )}
                             {fit && <span className="sp-fit">{fit}</span>}
@@ -507,11 +572,21 @@ function Picking({ data, example, map: MapPart, date, note: progress, onDone, on
         <div className="sp-bar" hidden={none}>
           {picks.length > 0 ? (
             <>
-              <p className="sp-sum">
-                <span className="num">{T.count(picks.length)}</span>
-                <span className="sp-names">{pickedNames.join(T.sep)}</span>
-              </p>
-              {chose && <CheckboxInput className="sp-fill" label={T.addMore} value={addMore} onChange={(v: boolean) => setAddMore(v)} />}
+              {over && room && (
+                <Text as="p" display="block" type="supporting" className="sp-over">
+                  {T.over(room.next)}
+                </Text>
+              )}
+              {chose && (
+                <CheckboxInput
+                  className="sp-fill"
+                  label={T.addMore}
+                  // 食事を選んでいないときは、昼食と夕食が自動で入ることを添える（選んだ場所だけで組まれると思って驚かせない）
+                  description={picks.some((x) => x.slot === 'lunch' || x.slot === 'dinner') ? undefined : T.mealNote}
+                  value={addMore}
+                  onChange={(v: boolean) => setAddMore(v)}
+                />
+              )}
               <Button variant="primary" size="lg" className="sp-make" label={chose ? T.make : T.auto} width="100%" onClick={() => done(picks, !chose || addMore)} />
             </>
           ) : (
@@ -550,7 +625,7 @@ function Picking({ data, example, map: MapPart, date, note: progress, onDone, on
       )}
       {toast && (
         <div className="toast-slot" key={toast.id}>
-          <Toast type="info" body={toast.text} isAutoHide={false} autoHideDuration={3500} onDismiss={() => setToast(null)} />
+          <Toast type="info" body={toast.text} isAutoHide={false} autoHideDuration={5000} onDismiss={() => setToast(null)} />
         </div>
       )}
     </div>

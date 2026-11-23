@@ -24,7 +24,7 @@ const SIGHT: [string, string, string, string[]][] = [
 ]
 const STREET_FOOD = ['市場', '甘味']
 // 食事の希望の札（「郷土料理」の札の「たこ焼き」）の言葉を、店の言葉にしてよいタグ
-const MEAL_WISH = ['そば', 'ラーメン', '魚', '肉', '洋食', '和食', '甘味', '郷土料理', '中華', 'カレー']
+export const MEAL_WISH = ['そば', 'ラーメン', '魚', '肉', '洋食', '和食', '甘味', '郷土料理', '中華', 'カレー']
 export type WishLabel = { tag: string; label: string }
 const MAX_LEN = isEn ? 66 : 26
 
@@ -36,12 +36,14 @@ const has = (name: string, words: string[]) => words.some((x) => name.toLowerCas
 const meal = (m: [string, string, string]) => (isEn ? m[2] : `の${m[1]}`)
 const sight = (m: [string, string, string, string[]]) => (isEn ? m[2] : `の${m[1]}`)
 
-// [場所の名前, 添える言葉]。言葉が無いときは名前だけ
-function phrase(s: Stop, date: string, wish: string[], labels: WishLabel[]): [string, string] {
+// [場所の名前, 添える言葉, 名前を「」でくくらないか]。言葉が無いときは名前だけ。
+// 食事の希望の札に合う店は、店の名前を出さずに札の言葉だけにする（首里城公園とA&Wのハンバーガー）
+type Phrase = [string, string, boolean?]
+function phrase(s: Stop, date: string, wish: string[], labels: WishLabel[]): Phrase {
   const { name, tags } = s.spot
   if (s.slot === 'lunch' || s.slot === 'dinner') {
     const asked = labels.find((c) => MEAL_WISH.includes(c.tag) && tags.includes(c.tag) && c.label.trim() && c.label.length <= (isEn ? 24 : 10))
-    if (asked) return [name, isEn ? `${asked.label.charAt(0).toLowerCase()}${asked.label.slice(1)} at` : `の${asked.label}`]
+    if (asked) return [asked.label.trim(), '', true]
     const hit = MEAL.find(([t]) => wish.includes(t) && tags.includes(t)) ?? MEAL.find(([t]) => tags.includes(t))
     return [name, hit ? meal(hit) : s.slot === 'lunch' ? W.lunch : W.dinner]
   }
@@ -58,8 +60,12 @@ function phrase(s: Stop, date: string, wish: string[], labels: WishLabel[]): [st
 }
 
 // 名前と言葉をつなぐ（日本語は「錦市場の食べ歩き」、英語は「the garden at Nanzen-ji Tenju-an」）。
-// 日本語で名前に空白があるときは、名前を「」でくくる（高徳院と「海沿いの キコリ食堂」の魚料理）
-const said = ([name, word]: [string, string]) => (isEn ? (word ? `${word} ${name}` : name) : `${/[\s\u3000]/.test(name.trim()) ? `「${name.trim()}」` : name}${word}`)
+// 日本語で 2 つの場所をつなぐとき（quote）は、空白のある名前を「」でくくって、名前の切れ目を示す（高徳院と「海沿いの キコリ食堂」の魚料理）。
+// 名前の中に「」があるときは、外を『』にする（『横浜ランドマークタワー 69階展望フロア「スカイガーデン」』）。
+// 場所の名前だけの題は、切れ目に迷わないので、くくらない（#328）
+const wrap = (name: string) => (/[「」]/.test(name) ? `『${name}』` : `「${name}」`)
+const said = ([name, word, bare]: Phrase, quote = true) =>
+  isEn ? (word ? `${word} ${name}` : name) : `${quote && !bare && /[\s\u3000]/.test(name.trim()) ? wrap(name.trim()) : name.trim()}${word}`
 const capital = (s: string) => s.charAt(0).toUpperCase() + s.slice(1)
 
 // ['南禅寺 天授庵の庭と', '錦市場の食べ歩き']（つなげると 1 行の文。折り返すときは区切りで折る）。
@@ -67,11 +73,14 @@ const capital = (s: string) => s.charAt(0).toUpperCase() + s.slice(1)
 export function highlightParts(stops: Stop[], date: string, wish: string[], labels: WishLabel[] = []): string[] {
   const parts = stops.map((s) => phrase(s, date, wish, labels))
   if (!parts.length) return []
+  // 場所が 1 つで言葉も添えない題（名前だけ）は、くくらない。言葉を添えるときは、名前と言葉の切れ目のためにくくる
+  const one = [capital(said(parts[0], !!parts[0][1]))]
+  if (parts.length < 2) return one
   const first = capital(said(parts[0]))
-  if (parts.length < 2) return [first]
-  const [name, word] = parts[1]
-  const second = said([name, word && word !== parts[0][1] ? word : ''])
-  if (first.length + 1 + second.length > MAX_LEN) return [first]
+  const [name, word, bare] = parts[1]
+  if (bare && name === parts[0][0]) return one
+  const second = said([name, word && word !== parts[0][1] ? word : '', bare])
+  if (first.length + 1 + second.length > MAX_LEN) return one
   return isEn ? [`${first} and`, second] : [`${first}と`, second]
 }
 

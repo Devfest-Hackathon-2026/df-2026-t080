@@ -1,6 +1,7 @@
-import type { AreaData, GeoHit, TripPoint } from '../types'
+import type { AreaData, GeoHit, Spot, TripPoint } from '../types'
 import { loggedFetch } from './apiLog'
 import { isEn, lang } from './i18n'
+import type { Talk } from './stayTalk'
 
 export type StepKey = 'famous' | 'hidden' | 'food' | 'cafe' | 'wish' | 'verify'
 export type JobState = {
@@ -14,7 +15,12 @@ export type JobState = {
   error?: string
   // 今の様子の印。次に聞くときに渡すと、サーバーは様子が変わるまで返事を待つ
   tag?: string
+  // 候補を集めている間に見せる、エリアの見どころとお店（作り置きか、先に届いた答えから。種類ごとに届いたら足す。無ければ無い）
+  preview?: JobPreview
 }
+export type PreviewGroup = 'famous' | 'hidden' | 'food' | 'cafe'
+export type PreviewSpot = Pick<Spot, 'id' | 'name' | 'kind' | 'tags' | 'why' | 'lat' | 'lng' | 'district' | 'photo'> & { group: PreviewGroup }
+export type JobPreview = { area: string; places: PreviewSpot[] }
 
 async function getJson<T>(url: string, init?: RequestInit): Promise<T> {
   const r = await loggedFetch(url, init)
@@ -47,8 +53,9 @@ export async function findPlace(q: string): Promise<GeoHit | null> {
 // 頼む旅。start と end（無ければ出発地に戻る）で頼む。area は作り置きのエリアのボタンから入れたときのエリアの名前。
 // 前の形で作った旅を探し直すときは、area だけで頼む
 export type TripAsk = { area?: string; start?: TripPoint; end?: TripPoint | null }
-export const startJob = (trip: TripAsk, wish: string) =>
-  getJson<JobState>('/api/jobs', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ...trip, wish, lang }) })
+// car: 車で回る旅（サーバーは電車の路線を取りに行かない）
+export const startJob = (trip: TripAsk, wish: string, car = false) =>
+  getJson<JobState>('/api/jobs', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ...trip, wish, lang, ...(car && { car }) }) })
 // プランを作ったときの頼み（調整の画面から、同じ旅で新しい候補を探すとき）
 export const tripOf = (d: AreaData): TripAsk =>
   d.query?.start ? { area: d.query.area, start: d.query.start, end: d.query.end ?? null } : { area: d.query?.area || d.area.name }
@@ -83,6 +90,12 @@ export type AdjustOp =
 export type AdjustReply = { reply?: string; ops?: AdjustOp[]; error?: string }
 export const askAdjust = (body: object) =>
   getJson<AdjustReply>('/api/adjust', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ...body, lang }) })
+
+// 泊まりの旅の 1 行の文を、旅のまとめへの差分に読み取る（Gemini を 1 回呼ぶ）。サーバーが無いビルドと、届かないときは例外
+export const askTrip = (text: string, summary: Talk, today: string) => {
+  if (STATIC) return Promise.reject(new TypeError('static'))
+  return getJson<{ diff?: Partial<Talk>; error?: string }>('/api/trip-ask', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ text, summary, today, lang }) })
+}
 
 // 旅のミッション（Gemini がその場所に合わせて 1 つ考える）
 export const askOdai = (body: unknown) =>

@@ -42,6 +42,62 @@ class GeocodeTest(unittest.TestCase):
         self.assertEqual(got['name'], '市ヶ谷駅')
         self.assertEqual(asked, ['市ヶ谷', '市ヶ谷駅'])
 
+    def test_station_found_by_spaced_name(self):
+        # 本物の返事の形: 「仙台駅」は名前が「仙台」の駅が当たらず別の店だけ、「東京駅」は「東京駅(改札外)」の通路だけが返る。
+        # 「仙台 駅」「東京 駅」なら駅だけが返る
+        sushi = hit('amenity', 'restaurant', '仙太鮨', 34.4688, 133.8211, code='JP-33', city='倉敷市')
+        sendai = hit('railway', 'station', '仙台', 38.2603516, 140.8823921, 'Sendai', code='JP-04', city='仙台市')
+        got, asked, _ = self.run_with({'仙台駅': [sushi], '仙台 駅': [sendai]}, '仙台駅')
+        self.assertEqual((got['name'], got['pref'], got['lat']), ('仙台駅', '宮城県', 38.260352))
+        self.assertEqual(asked, ['仙台駅', '仙台 駅'])
+        path = hit('highway', 'footway', '東京駅(改札外)', 35.6812767, 139.7644712, code='JP-13', city='千代田区')
+        tokyo = hit('railway', 'station', '東京', 35.6812546, 139.766706, 'Tōkyō', code='JP-13', city='千代田区')
+        got, asked, _ = self.run_with({'東京駅': [path], '東京 駅': [tokyo]}, '東京駅')
+        self.assertEqual((got['name'], got['lat']), ('東京駅', 35.681255))
+        self.assertEqual(asked, ['東京駅', '東京 駅'])
+        # 那覇空港駅は英語でも駅（Naha Airport）にする。1 件目は貸し自転車の「那覇空港駅」
+        bike = hit('amenity', 'bicycle_rental', '那覇空港駅', 26.2062943, 127.6521719, code='JP-47', city='Naha')
+        naha = hit('railway', 'station', '那覇空港', 26.2064858, 127.6522133, 'Naha Airport', code='JP-47', city='Naha')
+        en, asked, _ = self.run_with({'那覇空港駅': [bike], '那覇空港 駅': [naha]}, '那覇空港駅', 'en')
+        self.assertEqual((en['name'], en['ja'], en['pref']), ('Naha Airport Station', '那覇空港駅', 'Okinawa'))
+        # 都道府県の名前だけのときも、玄関口の駅をこの形で引く
+        town = hit('place', 'neighbourhood', '宮城', 35.7598, 139.7549, code='JP-13', city='足立区')
+        got, asked, _ = self.run_with({'宮城': [town], '仙台駅': [sushi], '仙台 駅': [sendai]}, '宮城')
+        self.assertEqual((got['name'], got['pref']), ('仙台駅', '宮城県'))
+        self.assertEqual(asked, ['宮城', '宮城駅', '仙台駅', '仙台 駅'])
+        en, _, _ = self.run_with({'Okinawa': [], 'Okinawa Station': [], '那覇空港駅': [bike], '那覇空港 駅': [naha]}, 'Okinawa', 'en')
+        self.assertEqual((en['name'], en['ja']), ('Naha Airport Station', '那覇空港駅'))
+        # 「市ヶ谷」のように駅を付けずに書いて「市ヶ谷駅」でも駅が無いときも、「市ヶ谷 駅」を引く
+        got, asked, _ = self.run_with({'市ヶ谷': [hit('place', 'quarter', '市谷', 35.69, 139.73)],
+                                       '市ヶ谷 駅': [hit('railway', 'station', '市ケ谷', 35.6932, 139.7368)]}, '市ヶ谷')
+        self.assertEqual(got['name'], '市ケ谷駅')
+        self.assertEqual(asked, ['市ヶ谷', '市ヶ谷駅', '市ヶ谷 駅'])
+        # 英語で Station と書いたときは、すでに駅だけを探す書き方なので引き直さない
+        _, asked, _ = self.run_with({}, 'Sendai Station', 'en')
+        self.assertEqual(asked, ['Sendai Station'])
+
+    def test_station_note_is_dropped(self):
+        # 本物の返事の形: 「東京駅」で駅が当たらないときに残るのは「東京駅(改札外)」「東京駅(改札外);丸の内中央口」の通路
+        for raw in ('東京駅(改札外)', '東京駅（改札内）', '東京駅(改札外);丸の内中央口', '東京駅;地下2階'):
+            got, _, _ = self.run_with({'東京駅': [hit('highway', 'footway', raw, 35.6813, 139.7645)]}, '東京駅')
+            self.assertEqual(got['name'], '東京駅', raw)
+        # 駅のあとでない括弧や、駅の名前そのものは削らない
+        for raw in ('Naha-kūkō (Airport) Station', '那覇空港駅', '梅田（大阪）', 'ホテル(本館)'):
+            self.assertEqual(places._bare(raw), raw)
+        en, _, _ = self.run_with({'那覇空港駅': [{**hit('building', 'train_station', '那覇空港駅', 26.2066, 127.6522, 'Naha-kūkō (Airport) Station',
+                                                          code='JP-47', city='Naha')}]}, '那覇空港駅', 'en')
+        self.assertEqual(en['name'], 'Naha-kūkō (Airport) Station')
+
+    def test_station_building_before_others(self):
+        # 本物の返事の形: 「那覇空港駅」の 1 件目は貸し自転車、2 件目が英語の名前を持つ駅舎。駅が当たらなければ駅舎にする
+        bike = hit('amenity', 'bicycle_rental', '那覇空港駅', 26.2062943, 127.6521719, code='JP-47', city='Naha')
+        hall = hit('building', 'train_station', '那覇空港駅', 26.2065834, 127.6522013, 'Naha-kūkō (Airport) Station', code='JP-47', city='Naha')
+        en, asked, _ = self.run_with({'那覇空港駅': [bike, hall]}, '那覇空港駅', 'en')
+        self.assertEqual((en['name'], en['ja'], en['lat']), ('Naha-kūkō (Airport) Station', '那覇空港駅', 26.206583))
+        self.assertEqual(asked, ['那覇空港駅', '那覇空港 駅'])
+        got, _, _ = self.run_with({'那覇空港駅': [bike]}, '那覇空港駅')
+        self.assertEqual(got['lat'], 26.206294)
+
     def test_station_name_without_eki(self):
         got, _, _ = self.run_with({'京都': [hit('railway', 'station', '京都', 34.9853, 135.7587, 'Kyoto', code='JP-26', city='京都市')]}, '京都')
         self.assertEqual((got['name'], got['pref']), ('京都駅', '京都府'))
@@ -106,7 +162,7 @@ class GeocodeTest(unittest.TestCase):
         city = hit('boundary', 'administrative', '福岡市', 33.5902, 130.4017, code='JP-40', city='福岡市')
         got, asked, _ = self.run_with({'福岡県 福岡駅': [], '福岡市': [city]}, '福岡県 福岡駅')
         self.assertEqual((got['name'], got['pref']), ('福岡市', '福岡県'))
-        self.assertEqual(asked, ['福岡県 福岡駅', '福岡市 福岡駅', '福岡市'])
+        self.assertEqual(asked, ['福岡県 福岡駅', '福岡県 福岡 駅', '福岡市 福岡駅', '福岡市'])
         got, _, _ = self.run_with({'福岡県 福岡駅': [toyama], '福岡市': [city]}, '福岡県 福岡駅')
         self.assertEqual(got['pref'], '福岡県')
         osaka = hit('railway', 'station', '福島駅', 34.6973, 135.4867, code='JP-27', city='大阪市')
@@ -170,6 +226,113 @@ class GeocodeTest(unittest.TestCase):
     def test_pref_named(self):
         self.assertEqual([places.pref_named(t) for t in ('福岡駅', 'Fukuoka Station', '福岡', '京都駅', '北海道', '博多駅', '福岡市')],
                          [40, 40, 40, 26, 1, 0, 0])
+
+    def test_prefecture_only_goes_to_gateway(self):
+        # 本物の返事の形: 「沖縄」で返るのは沖縄市（地域）。沖縄駅は無いので、那覇空港駅にする
+        okinawa = hit('boundary', 'administrative', '沖縄', 26.334374, 127.80566, 'Okinawa', code='JP-47', city='沖縄市')
+        naha = hit('railway', 'station', '那覇空港', 26.2063, 127.6522, 'Naha Airport', code='JP-47', city='那覇市')
+        answers = {'沖縄': [okinawa], '沖縄駅': [], '沖縄県': [okinawa], 'Okinawa': [okinawa], 'Okinawa Station': [],
+                   'Okinawa Prefecture': [okinawa], '那覇空港駅': [naha]}
+        got, asked, cache = self.run_with(answers, '沖縄')
+        self.assertEqual((got['name'], got['pref'], got['city'], got['lat']), ('那覇空港駅', '沖縄県', '那覇市', 26.2063))
+        self.assertEqual(asked, ['沖縄', '沖縄駅', '那覇空港駅'])
+        self.assertEqual(sorted(cache), sorted([places.find_key('ja', '沖縄'), places.find_key('ja', '那覇空港駅')]))
+        with mock.patch.object(places, '_search', side_effect=AssertionError('呼ばない')):
+            self.assertEqual(places.geocode('沖縄', 'ja', cache)['name'], '那覇空港駅')
+        for q in ('沖縄県', ' 沖縄 ', 'Okinawa Prefecture'):
+            got, _, _ = self.run_with(answers, q)
+            self.assertEqual(got['name'], '那覇空港駅', q)
+        en, asked, _ = self.run_with(answers, 'Okinawa', 'en')
+        self.assertEqual((en['name'], en['ja'], en['pref']), ('Naha Airport Station', '那覇空港駅', 'Okinawa'))
+        self.assertEqual(asked, ['Okinawa', 'Okinawa Station', '那覇空港駅'])
+        # 北海道は道の真ん中（大雪山のあたり）ではなく札幌駅
+        hokkaido = hit('boundary', 'administrative', '北海道', 43.45, 142.82, 'Hokkaido', code='JP-01', city='')
+        sapporo = hit('railway', 'station', '札幌', 43.0686, 141.3508, 'Sapporo', code='JP-01', city='札幌市')
+        for q, lang, name in (('北海道', 'ja', '札幌駅'), ('Hokkaido', 'en', 'Sapporo Station')):
+            got, _, _ = self.run_with({q: [hokkaido], '札幌駅': [sapporo]}, q, lang)
+            self.assertEqual((got['name'], got['lat']), (name, 43.0686), q)
+
+    def test_prefecture_only_skips_other_stations(self):
+        # 本物の返事の形: 「神奈川」は神奈川駅（京急の小さな駅）、「宮城」は東京都の地名が返る。どちらも玄関口の駅にする
+        kanagawa = hit('railway', 'station', '神奈川', 35.4715, 139.6275, code='JP-14', city='横浜市')
+        yokohama = hit('railway', 'station', '横浜', 35.4660, 139.6223, 'Yokohama', code='JP-14', city='横浜市')
+        got, asked, _ = self.run_with({'神奈川': [kanagawa], '横浜駅': [yokohama]}, '神奈川')
+        self.assertEqual((got['name'], got['lat']), ('横浜駅', 35.466))
+        self.assertEqual(asked, ['神奈川', '横浜駅'])
+        tokyo = hit('place', 'neighbourhood', '宮城', 35.7598, 139.7549, code='JP-13', city='足立区')
+        sendai = hit('railway', 'station', '仙台', 38.2601, 140.8822, 'Sendai', code='JP-04', city='仙台市')
+        got, asked, _ = self.run_with({'宮城': [tokyo], '仙台駅': [sendai]}, '宮城')
+        self.assertEqual((got['name'], got['pref']), ('仙台駅', '宮城県'))
+        self.assertEqual(asked, ['宮城', '宮城駅', '仙台駅'])
+        # 本物の返事の形: 「名古屋駅」の上位に駅として分類された物が無くても、名古屋駅という名前の場所にする（「名古屋駅」と書いたときと同じ）
+        aichi = hit('railway', 'station', '愛知御津', 34.8127, 137.3163, code='JP-23', city='豊川市')
+        stop = hit('highway', 'bus_stop', '名古屋駅', 35.17306, 136.88161, code='JP-23', city='名古屋市')
+        got, asked, _ = self.run_with({'愛知': [aichi], '名古屋駅': [stop]}, '愛知')
+        self.assertEqual((got['name'], got['lat'], got['pref']), ('名古屋駅', 35.17306, '愛知県'))
+        self.assertEqual(asked, ['愛知', '名古屋駅', '名古屋 駅'])
+
+    def test_prefecture_with_own_station_is_unchanged(self):
+        # 県名と同じ名前の駅が県庁所在地にあれば、問い合わせを増やさずその駅のまま
+        for q, code, pref in (('京都', 'JP-26', '京都府'), ('長野', 'JP-20', '長野県')):
+            st = hit('railway', 'station', q, 35.0, 136.0, q.title(), code=code, city=q + '市')
+            got, asked, _ = self.run_with({q: [st]}, q)
+            self.assertEqual((got['name'], got['pref']), (q + '駅', pref))
+            self.assertEqual(asked, [q])
+        town = hit('place', 'city', '長野', 36.65, 138.18, code='JP-20', city='長野市')
+        st = hit('railway', 'station', '長野', 36.643, 138.189, code='JP-20', city='長野市')
+        got, asked, _ = self.run_with({'長野': [town], '長野駅': [st]}, '長野')
+        self.assertEqual(got['name'], '長野駅')
+        self.assertEqual(asked, ['長野', '長野駅'])
+
+    def test_prefecture_head_keeps_place(self):
+        # 県名で始まるだけ（沖縄市・沖縄県庁・北海道大学）は、その場所のまま。玄関口は引かない
+        cases = {'沖縄市': hit('boundary', 'administrative', '沖縄市', 26.334, 127.805, code='JP-47', city='沖縄市'),
+                 '沖縄県庁': hit('office', 'government', '沖縄県庁', 26.2124, 127.6809, code='JP-47', city='那覇市'),
+                 '沖縄そば屋': hit('amenity', 'restaurant', '沖縄そば屋', 26.21, 127.68, code='JP-47', city='那覇市'),
+                 '北海道大学': hit('amenity', 'university', '北海道大学', 43.0743, 141.3409, code='JP-01', city='札幌市')}
+        for q, x in cases.items():
+            got, asked, _ = self.run_with({q: [x], '那覇空港駅': [], '札幌駅': []}, q)
+            self.assertEqual(got['name'], q, q)
+            self.assertNotIn('那覇空港駅', asked)
+            self.assertNotIn('札幌駅', asked)
+        self.assertEqual([places.pref_only(t) for t in ('沖縄', '沖縄県', 'okinawa', 'Okinawa  Prefecture', '東京都', '北海道',
+                                                        '沖縄駅', '沖縄市', '北海道大学', '那覇')],
+                         [47, 47, 47, 47, 13, 1, 0, 0, 0, 0])
+
+    def test_prefecture_only_gateway_not_found_keeps_pick(self):
+        # 玄関口の駅が見つからないときは、今までどおりの場所。問い合わせに失敗したら返すが取っておかない
+        okinawa = hit('boundary', 'administrative', '沖縄', 26.334374, 127.80566, code='JP-47', city='沖縄市')
+        got, _, cache = self.run_with({'沖縄': [okinawa]}, '沖縄')
+        self.assertEqual((got['name'], got['city']), ('沖縄', '沖縄市'))
+        self.assertEqual(cache[places.find_key('ja', '沖縄')]['city'], '沖縄市')
+        # 玄関口の名前で、別の都道府県の場所しか当たらないときも使わない
+        far = hit('railway', 'station', '那覇空港', 35.0, 139.0, code='JP-13', city='千代田区')
+        got, _, _ = self.run_with({'沖縄': [okinawa], '那覇空港駅': [far]}, '沖縄')
+        self.assertEqual(got['city'], '沖縄市')
+
+        def fake(params):
+            return {'沖縄': [okinawa], '沖縄駅': []}.get(params['q'])
+        cache = {}
+        with mock.patch.object(places, '_search', fake):
+            got = places.geocode('沖縄', 'ja', cache)
+        self.assertEqual(got['city'], '沖縄市')
+        self.assertEqual(cache, {})
+        with mock.patch.object(places, '_search', lambda params: [] if params['q'] != '那覇空港駅' else None):
+            with self.assertRaises(places.GeoBusy):
+                places.geocode('沖縄', 'ja', {})
+
+    def test_prefecture_only_gateway_city_when_station_not_found(self):
+        # 玄関口の駅が見つからないときは、駅を除いた名前（その県の中の市）にする
+        tokyo = hit('place', 'neighbourhood', '宮城', 35.7598, 139.7549, code='JP-13', city='足立区')
+        city = hit('boundary', 'administrative', '仙台市', 38.2682, 140.8694, 'Sendai', code='JP-04', city='仙台市')
+        got, asked, cache = self.run_with({'宮城': [tokyo], '仙台': [city]}, '宮城')
+        self.assertEqual((got['name'], got['pref']), ('仙台市', '宮城県'))
+        self.assertEqual(asked, ['宮城', '宮城駅', '仙台駅', '仙台 駅', '仙台', '仙台駅', '仙台 駅'])
+        self.assertEqual(cache[places.find_key('ja', '仙台駅')], {})
+
+    def test_gateways_follow_prefs(self):
+        self.assertEqual(len(places.GATEWAYS), len(places.PREFS))
+        self.assertTrue(all(g.endswith('駅') for g in places.GATEWAYS))
 
     def test_failure_is_not_remembered(self):
         cache = {}

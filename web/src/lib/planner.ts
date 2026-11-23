@@ -28,6 +28,7 @@ export type PlanInput = {
   banned: string[]
   overrides: Record<string, TransitRoute> // 区間の実際の経路（legKey ごと）
   modes?: Record<string, LegMode> // 本人が選んだ区間の手段（legKey ごと。無い区間は自動）
+  car?: boolean // 車で回る旅（徒歩と車で回る）
   stayFix: Record<string, number> // 本人が決めた滞在の長さ（分）。組み直しても変えない
   focus: string[] // 「この近くの場所を足す」と選んだ場所
   skipDistricts: string[] // 回らない地区
@@ -584,6 +585,7 @@ function seedInput(input: PlanInput) {
     banned: [...input.banned].sort(),
     overrides: sortedKeys(input.overrides),
     ...(input.modes && Object.keys(input.modes).length && { modes: sortedKeys(input.modes) }),
+    ...(input.car && { car: true }),
     stayFix: sortedKeys(input.stayFix),
     focus: [...(input.focus ?? [])].sort(),
     skipDistricts: [...(input.skipDistricts ?? [])].sort(),
@@ -699,7 +701,7 @@ export function makePlan(data: AreaData, input: PlanInput): Plan {
   const byId = new Map(data.places.map((s) => [s.id, s]))
   const keep = new Set([...input.must, ...input.pinned.map((p) => p.id)])
   const skip = new Set(input.skipDistricts ?? [])
-  const banned = new Set([...input.banned, ...data.places.filter((p) => p.district && skip.has(p.district) && !keep.has(p.id)).map((p) => p.id), ...notToAdd(data, keep)])
+  const banned = new Set([...input.banned, ...data.places.filter((p) => (p.unfound || (p.district && skip.has(p.district))) && !keep.has(p.id)).map((p) => p.id), ...notToAdd(data, keep)])
   // 外さない場所（行きたい場所・選び直した場所・この近くを回る場所・滞在を決めた場所）。
   // loose の場所は、値打ちは行きたい場所のまま、到着の時刻に入りきらないときだけ外せるようにする
   const locked = new Set([...keep, ...(input.focus ?? []), ...Object.keys(input.stayFix ?? {})])
@@ -1092,9 +1094,9 @@ const WORD = tr({
     fitShop: (w: string) => `希望の${w}に合う店です。`,
     fitSight: (w: string) => `希望の${w}に合います。`,
     now: (hour: number, pred: string) => `${hour}時台は${pred}。`,
-    peak: (range: string) => `混むのは${range}です。`,
-    unavoidable: '混む時間を避けられませんでした。',
-    near: (name: string, m: number) => `${name}から歩いて${m}分です。`,
+    peak: (range: string) => `混雑するのは${range}です。`,
+    unavoidable: '混雑する時間を避けられませんでした。',
+    near: (name: string, m: number) => `${name}から徒歩${m}分です。`,
   },
   en: {
     finale: 'A calm place to end the day.',
@@ -1222,7 +1224,7 @@ export function alternatives(data: AreaData, stop: Stop, plan: Plan, input: Plan
   else if (stop.spot.role === 'famous') pool = data.places.filter((s) => isSight(s) && s.role === 'hidden' && distM(s, stop.spot) < 3000)
   else pool = data.places.filter((s) => isSight(s) && s.role === 'hidden' && distM(s, stop.spot) < 5000)
   return pool
-    .filter((s) => !inPlan.has(s.id) && !input.banned.includes(s.id) && s.close >= at + 30)
+    .filter((s) => !inPlan.has(s.id) && !input.banned.includes(s.id) && !s.unfound && s.close >= at + 30)
     .map((s) => ({ s, sc: value(s, stop.slot, c) - CROWD_COST[levelAt(s, at, input.day)] - distM(s, stop.spot) / 400 }))
     .sort((a, b) => b.sc - a.sc)
     .slice(0, 3)

@@ -10,28 +10,28 @@ import { joinNames, tr } from '../lib/i18n'
 
 const T = tr({
   ja: {
-    noRoom: '端末の空きが足りないため、ミッションを保存できませんでした',
-    noStop: 'ミッションを出せる場所がプランにありません',
+    noRoom: 'デバイスの空き領域が不足しているため、ミッションを保存できませんでした',
+    noStop: 'ミッションを作成できる場所がプランにありません',
     badPhoto: 'この写真は読み込めません',
-    moved: (names: string) => `ミッションを${names}に移しました`,
+    moved: (names: string) => `ミッションを${names}に移動しました`,
     sep: '・',
     thinking: '考えています……',
     outOfPlan: 'この場所はプランから外れています。',
     alt: (t: string) => `ミッションの写真: ${t}`,
-    retake: '撮り直す',
+    retake: '再撮影',
     take: '写真を撮る',
-    early: '当日にここから撮れます',
-    moveIn: 'プランの場所に移す',
-    another: (n: number) => `別のミッションにする（あと${n}回）`,
+    early: '当日ここから撮影できます',
+    moveIn: 'プランの場所に移動',
+    another: (n: number) => `別のミッションに変更（あと${n}回）`,
     nextLevel: '次のミッションの難しさ',
     firstLevel: 'ミッションの難しさ',
     saved: 'ミッションを記録しました。',
     title: '旅のミッション',
-    about: '旅のどこかで、1 つの物をじっくり見て 1 枚撮るミッションを出します。',
+    about: '旅のどこかで、1つの物をじっくり見て1枚撮るミッションを作成します。',
     geminiThinking: 'Gemini が考えています……',
-    getN: (n: number) => `ミッションを${n}つ出す`,
-    get: 'ミッションを出す',
-    oneMore: 'ミッションをもう1つ出す',
+    getN: (n: number) => `ミッションを${n}つ作成`,
+    get: 'ミッションを作成',
+    oneMore: 'ミッションをもう1つ作成',
   },
   en: {
     noRoom: 'Not enough storage to save the mission',
@@ -59,7 +59,7 @@ const T = tr({
   },
 })
 
-// ミッションを出す・出し直す・写真を記録する（プランの画面と場所の画面で同じものを使う）。
+// ミッションを作成・出し直す・写真を記録する（プランの画面と場所の画面で同じものを使う）。
 // ミッションはエリアごとに取ってあるので、since（この旅を作り始めた時刻）より後の分だけを、この旅のミッションとして扱う。
 // それより前の分（前の旅のミッションと写真）は消さずに、書き込むときもそのまま残す
 function useOdai(area: string, date: string, plan: Plan, since: number, onNotice: (text: string) => void) {
@@ -292,7 +292,7 @@ function OdaiEntry({ item, busy, inPlan, no, showPlace, early, onReroll, onPhoto
 }
 
 // プランの画面の「旅のミッション」（旅全体で設定の数まで。数は調整の画面の「その他の設定」で選ぶ。
-// 難しさは、最初のミッションを出す前にここでも選べる（調整の画面と同じ設定）
+// 難しさは、最初のミッションを作成前にここでも選べる（調整の画面と同じ設定）
 export function TripOdai({ area, date, plan, count, level, since, early, onLevel, onOpen, onNotice }: { area: string; date: string; plan: Plan; count: number; level: OdaiLevel; since: number; early: boolean; onLevel: (l: OdaiLevel) => void; onOpen: (id: string) => void; onNotice: (t: string) => void }) {
   const { trip, busy, keep, add, reroll, photo } = useOdai(area, date, plan, since, onNotice)
   const moving = useMoveOdai(area, date, plan, count, trip, keep, onNotice)

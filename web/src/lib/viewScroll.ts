@@ -6,12 +6,20 @@ type Pos = { win: number; panel: number }
 const TOP: Pos = { win: 0, panel: 0 }
 // 中身があとから届く画面では、届くまでこの長さだけ位置を合わせ直す（その間に本人が動かしたら、やめる）
 const SETTLE_MS = 1500
+// 作り直した App は、最初のプランを組むまで（時刻表の目安を待つ間も）合わせ直す
+const REMOUNT_MS = 5000
 
 const panelOf = () => document.querySelector<HTMLElement>('.plan-view > .panel')
 const put = (to: Pos) => {
   window.scrollTo(0, to.win)
   const pn = panelOf()
   if (pn) pn.scrollTop = to.panel
+}
+
+// 同じ画面のまま App を作り直す前に呼ぶ（作り直したあと、今の位置に戻す）
+let kept: Pos | null = null
+export function keepScroll() {
+  kept = { win: window.scrollY, panel: panelOf()?.scrollTop ?? 0 }
 }
 
 // 戻す前に呼ぶ関数を返す（次に画面が替わったときだけ、元の位置に戻す）
@@ -36,6 +44,16 @@ export function useViewScroll(view: string): () => void {
     return () => document.removeEventListener('scroll', on, { capture: true })
   }, [])
 
+  // 作り直した App では、中身が入れ替わるたびにも合わせ直す
+  const remount = useRef(false)
+  useLayoutEffect(() => {
+    if (!kept) return
+    want.current = kept
+    remount.current = true
+    kept = null
+    put(want.current)
+  }, [])
+
   useLayoutEffect(() => {
     if (cur.current === view) return
     cur.current = view
@@ -56,12 +74,17 @@ export function useViewScroll(view: string): () => void {
     ro.observe(document.body)
     const pn = panelOf()
     if (pn?.firstElementChild) ro.observe(pn.firstElementChild)
+    const again = remount.current
+    const mo = again ? new MutationObserver(() => put(to)) : null
+    remount.current = false
+    mo?.observe(document.body, { childList: true, subtree: true })
     const stop = () => {
       ro.disconnect()
+      mo?.disconnect()
       window.clearTimeout(t)
       for (const k of ['wheel', 'touchstart', 'keydown', 'pointerdown'] as const) window.removeEventListener(k, stop, true)
     }
-    const t = window.setTimeout(stop, SETTLE_MS)
+    const t = window.setTimeout(stop, again ? REMOUNT_MS : SETTLE_MS)
     for (const k of ['wheel', 'touchstart', 'keydown', 'pointerdown'] as const) window.addEventListener(k, stop, { capture: true, passive: true })
     return stop
   }, [view])

@@ -24,7 +24,7 @@ type Props = {
   contact: string | null
   onChoose: (t: BusTrip) => void
   onRemove: () => void
-  onTransit: () => void // 乗換のスクリーンショットを入れる画面へ
+  onTransit: () => void // 乗換のスクリーンショットを追加画面へ
   onMode: (m: LegMode | null) => void // 区間の手段を選ぶ（null は自動に戻す）
   onClose: () => void
 }
@@ -38,27 +38,27 @@ const T = tr({
   ja: {
     both: '電車・バスの便',
     bus: 'バスの便',
-    finding: '便を探しています……',
+    finding: '便を検索しています……',
     none: 'この時間に乗換なしで行ける便はありません。',
     parts: (a: number, b: number, c: number) => `徒歩 ${a}分・乗車 ${b}分・徒歩 ${c}分`,
     bound: (h: string) => (/行き?$/.test(h) ? h : `${h} 行き`),
     chosen: '選択中',
-    current: '今の便',
-    choose: 'この便にする',
-    remove: '便を外す',
-    maps: 'ほかの行き方を Google マップで見る',
-    shot: '乗換のスクリーンショットを入れる',
+    current: '現在の便',
+    choose: 'この便を選択',
+    remove: '便の選択を解除',
+    maps: 'ほかの経路を Google マップで見る',
+    shot: '乗換のスクリーンショットを追加',
     rail: '電車の目安',
-    board: '乗る',
-    alight: '降りる',
+    board: '乗車',
+    alight: '下車',
     ride: (m: number) => `乗車 約${m}分`,
     railParts: (a: number, w: number, c: number) => `徒歩 ${a}分・待ち 約${w}分・徒歩 ${c}分`,
-    railNote: '時刻表が無いので、時間は目安です。',
+    railNote: '時刻表がないため、時間は目安です。',
     estimate: '電車・バスの時間は目安です。',
     railCredit: '路線と駅:',
-    getOff: (n: number, train: boolean) => (n === 1 ? (train ? '次の駅で降りる' : '次の停留所で降りる') : `${n}${train ? '駅' : '停'}目で降りる`),
+    getOff: (n: number, train: boolean) => (n === 1 ? (train ? '次の駅で下車' : '次の停留所で下車') : `${n}${train ? '駅' : '停'}目で下車`),
     via: (n: number, train: boolean) => `途中 ${n}${train ? '駅' : '停留所'}`,
-    hideVia: (train: boolean): string => (train ? '途中の駅を隠す' : '途中の停留所を隠す'),
+    hideVia: (train: boolean): string => (train ? '途中の駅を非表示' : '途中の停留所を非表示'),
     more: (n: number, train: boolean) => `……ほか ${n}${train ? '駅' : '停留所'}`,
     platform: (p: string, train: boolean) => (/(番線|のりば|乗り場|番)$/.test(p) ? p : train && /^\d+$/.test(p) ? `${p}番線` : `${p}のりば`),
   },
@@ -136,7 +136,7 @@ function StopRow({ at, time, name, platform }: { at: 'board' | 'alight'; time: R
 }
 
 // 区間の乗換なしのバス・電車の便（3 つまで）。選ぶと、その便の時刻でスケジュールを組み直す。
-// 今スケジュールに出ている便は、選んだ便なら「選択中」、選ぶ前なら「今の便」として、選ぶボタンの代わりに出す。
+// 今スケジュールに出ている便は、選んだ便なら「選択中」、選ぶ前なら「現在の便」として、選ぶボタンの代わりに出す。
 // 暗幕を置かずに開き、上の地図でその区間を見られるようにする
 export function BusSheet({ fromName, toName, leg, trips, chosen, current, rail, sources, contact, onChoose, onRemove, onTransit, onMode, onClose }: Props) {
   const list = trips ?? []
@@ -171,7 +171,7 @@ export function BusSheet({ fromName, toName, leg, trips, chosen, current, rail, 
         <ul className="bus-trips">
           {shown.map((t) => {
             // 1 つの便は、乗る時刻と降りる時刻をいちばん大きく、時刻表のように停留所と並べて出す（路線の色の線と丸でつなぐ）。
-            // 間に路線名の札と行き先・何停目で降りるか・途中の停留所、下の段に徒歩と乗車の分と選ぶボタン
+            // 間に路線名の札と行き先・何停目で下車か・途中の停留所、下の段に徒歩と乗車の分と選ぶボタン
             const on = chosen ? sameTrip(t, chosen) : !!current && sameTrip(t, current)
             const train = isTrain(t)
             const color = busColor(t)

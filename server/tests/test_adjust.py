@@ -65,6 +65,11 @@ class CleanTest(unittest.TestCase):
         self.assertIn('prefer の moveLess', en.split('英語で書くこと')[1])
         self.assertIn('移動を少なくする（オフ）', adjust.build_prompt({**BODY, 'prefer': 'on'}))
 
+    def test_prompt_tells_car_only_for_car_trips(self):
+        self.assertIn('移動の手段: 徒歩と車', adjust.build_prompt({**BODY, 'car': True}))
+        self.assertNotIn('移動の手段', adjust.build_prompt(BODY))
+        self.assertNotIn('移動の手段', adjust.build_prompt({**BODY, 'car': 'yes'}))
+
     def test_prompt_tells_distance_from_plan(self):
         body = {'request': '昼食を安い店にして',
                 'plan': [{'id': 'pa', 'name': '清水寺', 'lat': 34.9949, 'lng': 135.7850}],

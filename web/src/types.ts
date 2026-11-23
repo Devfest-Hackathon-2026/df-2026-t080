@@ -30,6 +30,7 @@ export type Spot = Point & {
   photo?: WikiPhoto | null
   placeId?: string // Google の Places の place_id（照合できた場所だけ）
   placeMiss?: boolean // Places で照合して見つからなかった
+  unfound?: boolean // Places でも地図のデータでも見つからなかった（候補の一覧に出さず、自動では選ばない。選んである場所は残す）
   locatedAt?: number // 位置を Places から取った時刻（秒）
   guess?: [number, number] // Places で照合する前の位置
   // 検索で入れた場所の、曜日ごとの営業時間（lib/hours.ts の Period。Places の内容なので取っておかない。null は分からない、無ければまだ聞き直していない）
@@ -53,10 +54,12 @@ export type AreaData = {
   themes?: { label: string; hint: string }[]
   conditions: Condition[]
   places: Spot[]
+  // 希望に名前を書いた場所のうち、遠くて候補に入れなかった場所の名前
+  far?: string[]
   // 頼んだ内容（start・end は出発地と到着地で頼んだ旅だけ。前の形はエリアの名前だけ）
   query?: { area: string; wish: string; start?: TripPoint; end?: TripPoint | null }
   example?: { start: number; end?: number; must: string[] } // 例のプランを開いたときの出発と帰る時刻（0 時からの分）と、選んだ場所
-  demo?: boolean // 「京都のデモを試す」・?example で組んだ例のプラン（端末とクラウドに 1 件だけ残す）
+  demo?: boolean // 「京都のデモを試す」・?example で組んだ例のプラン（手を入れたものだけを、端末とクラウドに 1 件だけ残す）
   // 全部の点どうしの移動時間（分）。ids は出発地（'start'）・到着地（'end'。ある旅だけ）・候補の順
   // heights: 地点ごとの地面の高さ（m。ids と同じ並び。データが無い所は null）
   matrix?: { ids: string[]; walk: (number | null)[][]; drive: (number | null)[][]; walkM?: (number | null)[][]; heights?: (number | null)[] } | null
