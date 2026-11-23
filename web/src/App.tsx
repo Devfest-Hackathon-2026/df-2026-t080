@@ -2734,32 +2734,6 @@ export default function App() {
             <span className="sum-link-do">{T.fillShort}</span>
           </button>
         )}
-        {statsOpen && (
-          <Sheet title={T.breakdown} lead={`${fmt(plan.leave)}–${fmt(plan.finish)}`} onClose={() => setStatsOpen(false)} card>
-            <dl className="sum-stats num">
-              {(
-                [
-                  [T.placesL, T.stopsN(plan.stops.length)],
-                  [T.stayN, fmtDur(stayTotal)],
-                  [T.movingL, fmtDur(plan.moving)],
-                  [T.waitL, fmtDur(slack)],
-                ] as [string, string][]
-              )
-                .filter(([k]) => k !== T.waitL || slack > 0)
-                .map(([k, v]) => (
-                  <div key={k}>
-                    <dt>{k}</dt>
-                    <dd>{v}</dd>
-                  </div>
-                ))}
-            </dl>
-            {-late - leeway >= 30 && (
-              <Text as="p" display="block" type="supporting" className="note num">
-                {T.early(fmtDur(-late), !!data.end || ends.to, fmt(end))}
-              </Text>
-            )}
-          </Sheet>
-        )}
 
         <section className="schedule" aria-labelledby="route-title">
           <div className="sec-head">
@@ -2963,6 +2937,33 @@ export default function App() {
           /></Suspense>
         )
       })()}
+      {/* 時間の内訳。ほかのシートと同じく一覧の外に置く（一覧の中だと、広い画面で上の帯の下に潜る） */}
+      {statsOpen && (
+        <Sheet title={T.breakdown} lead={`${fmt(plan.leave)}–${fmt(plan.finish)}`} onClose={() => setStatsOpen(false)} card>
+          <dl className="sum-stats num">
+            {(
+              [
+                [T.placesL, T.stopsN(plan.stops.length)],
+                [T.stayN, fmtDur(stayTotal)],
+                [T.movingL, fmtDur(plan.moving)],
+                [T.waitL, fmtDur(slack)],
+              ] as [string, string][]
+            )
+              .filter(([k]) => k !== T.waitL || slack > 0)
+              .map(([k, v]) => (
+                <div key={k}>
+                  <dt>{k}</dt>
+                  <dd>{v}</dd>
+                </div>
+              ))}
+          </dl>
+          {-late - leeway >= 30 && (
+            <Text as="p" display="block" type="supporting" className="note num">
+              {T.early(fmtDur(-late), !!data.end || ends.to, fmt(end))}
+            </Text>
+          )}
+        </Sheet>
+      )}
       {crowdOpen && <CrowdSwapSheet data={data} plan={plan} input={input} onSwap={(from, to) => swap(from, to, false)} onClose={() => setCrowdOpen(false)} />}
       {walkIdx !== null && walkIdx <= plan.stops.length && (() => {
         const { from, to, leg } = legAt(walkIdx)
