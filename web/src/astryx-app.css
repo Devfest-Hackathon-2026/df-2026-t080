@@ -848,8 +848,19 @@ section.odai {
   border-radius: var(--radius-page);
   background: var(--panel);
 }
+/* 今開いている旅の印は、2px の線 1 本。写真より手前に描く（札の枠＋内側の影だと、札の所は 4px・写真の横は 2px になり、写真がはみ出て見える） */
 .home-item[data-now] {
+  position: relative;
+  border: 0;
+}
+.home-item[data-now]::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  border-radius: inherit;
   box-shadow: inset 0 0 0 2px var(--color-accent);
+  pointer-events: none;
 }
 .home-open {
   grid-template-columns: minmax(0, 1fr) auto;
