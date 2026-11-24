@@ -144,7 +144,7 @@ DevFest GDGoC Japan Hackathon 2026 参加チーム「いいおゼミ」（df-202
 |環境|説明|
 |--|--|
 |Cloud Run|本番環境。Gemini (Vertex AI) を利用できる。Gemini 用とアプリの配信用で、Google Cloud のプロジェクトと請求先アカウントを分けている|
-|GitHub Pages|[v76nl.github.io/devfest-hackathon-2026](https://v76nl.github.io/devfest-hackathon-2026/) 。サーバーを使わない静的モード。京都のデモのみ動作する。Google Maps JavaScript API のキーを設定していないため、地図は MapLibre GL を使用する。開発用リポジトリからデプロイしている|
+|GitHub Pages|[v76nl.github.io/devfest-hackathon-2026](https://v76nl.github.io/devfest-hackathon-2026/) 。サーバーを使わない静的モードで、京都のデモを公開している。地図は MapLibre GL を使用する。開発用リポジトリからデプロイしている|
 |ローカル|`python run.py` 。`.env` に自分の Gemini API キーを設定すると、Gemini を利用できる|
 
 Cloud Run へのデプロイ手順は [web/README.md](web/README.md) の「Cloud Run に置く」を参照。プロジェクト ID などの識別子は、このリポジトリには記載していない。
@@ -161,9 +161,9 @@ Cloud Run へのデプロイ手順は [web/README.md](web/README.md) の「Cloud
   - 都道府県名だけの出発地を県庁所在地の主要駅として扱う処理 (#280・#284)
   - 「服装の目安」と「ペンギンの一言」の役割の分離（#353・#354）
   - UI の文言とデザインの見直し（#263・#265、#291 以降の UI の PR）
-- 未実装: 稼働監視、複数インスタンスでの動作（レート制限のカウントとジョブの進捗をサーバーのメモリに保持するため、Cloud Run の最大インスタンス数は 1）
-- 実装済み／一部／未実装の一覧（根拠となるファイル付き）は [docs/implementation-status.md](docs/implementation-status.md) を参照
-- バス・電車の便の表示は、時刻表データがあるエリアのみ対応
+- 設計上の制約: レート制限のカウントとジョブの進捗をサーバーのメモリに保持する設計のため、Cloud Run の最大インスタンス数は 1。ログは標準出力から Cloud Run に出力する（構造化ログと稼働監視は今後の拡張）
+- 実装状況の一覧（根拠となるファイル付き）は [docs/implementation-status.md](docs/implementation-status.md) を参照
+- バス・電車の実際の便は、時刻表データ（ODPT）があるエリアで表示する。時刻表が無いエリアは、OpenStreetMap の路線データによる目安と Google マップへのリンクで補完する
 
 ## ローカル開発
 
@@ -302,7 +302,7 @@ df-2026-t080
 │
 ├── docs/                             - 提出ドキュメント
 │   ├── description.md                - プロダクト説明ドキュメント
-│   ├── implementation-status.md      - 実装済み／一部／未実装の一覧
+│   ├── implementation-status.md      - 実装状況の一覧
 │   ├── tech-choices.md               - 技術選定の理由
 │   ├── ai-usage.md                   - AI の利用場面
 │   ├── prompts.md                    - Gemini に送信するプロンプトの一覧
@@ -329,7 +329,7 @@ df-2026-t080
 | ファイル | 内容 |
 |---|---|
 | [docs/description.md](docs/description.md) | プロダクト説明ドキュメント（運営の指定様式の1〜9） |
-| [docs/implementation-status.md](docs/implementation-status.md) | 実装済み／一部／未実装の一覧（根拠となるファイル付き） |
+| [docs/implementation-status.md](docs/implementation-status.md) | 実装状況の一覧（根拠となるファイル付き） |
 | [docs/tech-choices.md](docs/tech-choices.md) | 技術選定の理由 |
 | [docs/ai-usage.md](docs/ai-usage.md) | AI の利用場面と、AI の提案を採用しなかった場面 |
 | [docs/prompts.md](docs/prompts.md) | Gemini に送信するプロンプトの一覧 |
