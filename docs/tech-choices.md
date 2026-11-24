@@ -20,8 +20,8 @@
 |---|---|
 | 候補 | Vertex AI の Gemini／Google AI Studio の Gemini API キー／他社の LLM API |
 | 選んだもの | **Vertex AI の Gemini**（`server/gemini.py`、`google-genai`）。モデルは Flash 系、考える量は少なめ（`ZT_THINKING=LOW`） |
-| 選んだ理由 | ① 運営の規約: プロダクトのメイン技術は Google 技術。他社 AI がコアだと審査対象外。② 配られたクレジット（$20）は Vertex AI にだけ使える（AI Studio には使えない）。③ Cloud Run のサービスアカウントで認証でき、鍵を持たなくて済む。④ Flash 系で、考える量を `LOW` にすると、1 回が速い（`web/README.md`：既定の量では約 2 倍遅い） |
-| 捨てた理由 | AI Studio のキー: 手元の開発には使う（無料枠）が、本番には使わない（クレジットが使えず、鍵の管理も要る）。他社の LLM: 規約上、禁止ではないが、Google 技術の活用では評価されない |
+| 選んだ理由 | ① 配られたクレジット（$20）は Vertex AI にだけ使える（AI Studio には使えない）。② Cloud Run のサービスアカウントで認証でき、鍵を持たなくて済む。③ Flash 系で、考える量を `LOW` にすると、1 回が速い（`web/README.md`：既定の量では約 2 倍遅い） |
+| 捨てた理由 | AI Studio のキー: 手元の開発には使う（無料枠）が、本番には使わない（クレジットが使えず、鍵の管理も要る）。他社の LLM: 別に API キーの管理が要り、配られたクレジットも使えない |
 | 使い分け | **Gemini に任せるもの**: 候補の収集、混雑の推定、プランへの頼みの解釈、ミッションの作成、スクリーンショットの読み取り、その日の注意（ペンギンの一言）、泊まりの旅の 1 行の文の読み取り（書いてあることだけを拾わせ、次に何を聞くかは画面が決める）。**Gemini に任せないもの**: 時刻の計算と、回る順番（間に合わないスケジュールを防ぐため。`web/src/lib/planner.ts` が規則で行う）、旅行者の最終的な選択 |
 | 限界 | 混雑・営業時間などの推定は、実測ではなく、間違うことがある。画面に「推定」と出し、Google マップで確認できるリンクを添える。Gemini の呼び出しは、1 時間あたりの上限（`ZT_LLM_PER_HOUR`）で、費用と暴走を抑える |
 
@@ -32,7 +32,7 @@
 | 候補 | MapLibre ＋ OpenFreeMap／Google マップ（Maps JavaScript API）／Leaflet ほか |
 | 選んだもの | **キーがあれば Google マップ、無い・通らないときは MapLibre**（`web/src/lib/gmaps.ts`、`GoogleMapView.tsx`、`MapView.tsx`）。同じ受け取り方で、同じものを描く |
 | 選んだ理由 | ① Google 技術の活用。② キーが無い環境（GitHub Pages のモック、手元の開発）でも動く。③ キーが通らないとき（制限・失効）に、画面が止まらない |
-| 捨てた理由 | Google マップだけ: キー・料金に依存し、モックと手元で動かない。MapLibre だけ: Google 技術の活用が弱い |
+| 捨てた理由 | Google マップだけ: キー・料金に依存し、モックと手元で動かない。MapLibre だけ: Google マップの場所の情報（写真・評価・営業時間）を出せない |
 | 限界 | 経路の線と移動時間（徒歩・車）は、まだ OSRM（OpenStreetMap）。Google の Routes API への移行は、料金の確認が済んでおらず、保留（issue #10） |
 
 ## 4. 場所の情報: Places API（New）
