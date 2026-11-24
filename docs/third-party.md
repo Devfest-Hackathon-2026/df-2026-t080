@@ -1,6 +1,6 @@
-# 使った素材・ライブラリ・データの出典とライセンス（著作物利用シートの元資料）
+# 使った素材・ライブラリ・データの出典とライセンス
 
-確認日: 2026-11-07（PR #112 までの `main` を反映。そのあとに入った物は、各行に書き足した）。2026-11-24 に、決勝の版（PR #356 までの `main`）と決勝のスライド・デモ動画に合わせて見直した（予選の提出〔PR #260 までの `main`〕からの差分で、増えた物・変わった物を足し、「7」を今の字と道具に直した。依存物〔`web/package.json`・`pnpm-lock.yaml`・`server/requirements.txt`・`Dockerfile`〕は予選から変わっていない）。この文書は、項目を**名前・用途・ライセンス・表示の要否・画面での表示・確認状態**で整理した下書き。提出した著作物利用シート（運営の指定様式。列は No.・著作物の名称・種類・入手元URL・権利者名・ライセンス形態・改変の有無）は、この内容を写したもの。
+確認日: 2026-11-07。2026-11-24 に、決勝の版（PR #356 までの `main`）と決勝のスライド・デモ動画に合わせて更新した（依存物〔`web/package.json`・`pnpm-lock.yaml`・`server/requirements.txt`・`Dockerfile`〕は予選から変わっていない）。項目を**名前・用途・ライセンス・表示の要否・画面での表示・確認状態**で整理した。提出した著作物利用シート（運営の指定様式。列は No.・著作物の名称・種類・入手元URL・権利者名・ライセンス形態・改変の有無）は、この内容を写したもの。
 **確認状態**: ✅ 確認済み（コード・パッケージ情報・資料で確かめた）／❓ 未確認（一般に知られているが、この作業では原資料を確かめていない）。
 
 ## 1. ライブラリ
@@ -32,12 +32,12 @@
 |---|---|---|---|---|---|
 | **公共交通オープンデータセンター（ODPT）**の時刻表（バス・電車） | 便と、目安の移動時間（`server/bus.py`） | **公共交通オープンデータ基本ライセンス**（出典の表示が必要）。**使うのは、出典表示で済むライセンスの時刻表だけ**（CC BY-SA・ODbL・NC、チャレンジ限定、事前承認が要るものは使わない）。7 日で取り直す。丸ごと取れる形にしない（1 回 3 便まで、回数の上限） | 要（事業者・版・ライセンス・正確性を保証しない旨・問い合わせ先） | ✅ 出す（`BusCredit.tsx`、シートの下とプランの下） | ✅（PR #38・#52 の説明とコード） |
 | **Google Maps Platform**（Maps JavaScript API） | 地図（キーがあるとき） | Google Maps Platform の利用規約 | 要（Google の地図に組み込みの帰属表示） | ✅ 地図に組み込み（実機で目視は未） | ❓ |
-| **Google Maps Platform**（Places API (New)） | 写真・評価・営業時間・位置、地図に写っている範囲の検索（この付近で検索。Text Search の `locationRestriction`。結果は保存しない）、営業状況（`businessStatus`。閉業・休業の店を候補から外す）、一覧の小さな写真（`/api/place-thumb`。写真の項目だけを頼む）（`server/gplaces.py`） | Places の規約。Google 以外の地図と一緒に使えない。保存してよいのは `place_id`（期限なし）と緯度経度（30 日まで）だけ | 要（写真の投稿者名と、Google マップの帰属） | ✅ 出す（`GooglePlace.tsx`）。Google マップが地図のときだけ表示 | ✅（PR #17・#22 の説明とコード）。本番で有効かは未確認 |
+| **Google Maps Platform**（Places API (New)） | 写真・評価・営業時間・位置、地図に写っている範囲の検索（この付近で検索。Text Search の `locationRestriction`。結果は保存しない）、営業状況（`businessStatus`。閉業・休業の店を候補から外す）、一覧の小さな写真（`/api/place-thumb`。写真の項目だけを頼む）（`server/gplaces.py`） | Places の規約。Google 以外の地図と一緒に使えない。保存してよいのは `place_id`（期限なし）と緯度経度（30 日まで）だけ | 要（写真の投稿者名と、Google マップの帰属） | ✅ 出す（`GooglePlace.tsx`）。Google マップが地図のときだけ表示 | ✅（PR #17・#22 の説明とコード。本番で有効なのは、2026-11-07 に確認） |
 | **Vertex AI（Gemini）** | 候補・混雑の推定・ミッション・頼みの解釈・画像の読み取り・泊まりの旅の 1 行の文から行き先・日付などを読み取る（`server/tripask.py`） | Google Cloud の利用規約 | — | ✅ Gemini が作った文に記号を付ける | ✅ |
 | **OpenFreeMap** と、地図データ（© OpenStreetMap contributors、OpenMapTiles） | 地図のタイルとスタイル（MapLibre） | 地図データは ODbL。OpenFreeMap の利用条件に従う | 要（帰属表示） | ✅ 地図の帰属表示を出す設定（`attributionControl: { compact: true }`。目視は未） | ❓ |
 | **OSRM**（`routing.openstreetmap.de` の公開サーバー） | 徒歩・車の移動時間と経路の線（`server/enrich.py`） | 経路データは OpenStreetMap（ODbL）。公開サーバーの利用方針に従う（大量利用は想定されていない） | 要（OSM の帰属） | ✅ 「経路と位置: © OpenStreetMap contributors」を、プランと候補の一覧の下に出す（PR #57）。回数は 1 つずつ・1 秒あけて送る | ❓（FOSSGIS の規約の全文は読めていない） |
-| **Overpass API**（`overpass-api.de`。込んでいるときは予備の公開サーバー `overpass.private.coffee`・`overpass.kumi.systems`〔どちらも Private.coffee の運営。kumi.systems は旧名〕）と、OpenStreetMap の路線と駅（© OpenStreetMap contributors） | 時刻表の便が無い組みの、乗換なしの電車の目安（`server/rail.py`） | データは **ODbL**。Overpass の公開サーバーの利用方針（1 日 1 万回・1 GB まで、定期的な利用はその 100 分の 1、並列にしない、名乗る、429 のあとは間をあける。商用は自前か有料のサーバー）に従う。予備の Private.coffee は「どの用途でも使ってよい・回数の制限なし・大規模に使うなら事前に連絡」。範囲ごとに 14 日の作り置き・全サーバーの合計で 1 度に 1 つ・5 秒あける・1 日 100 回まで。名乗りは `IntenTrip/1.0` | 要（OSM の帰属と ODbL） | 出す（画面の出典の表示は本体が作る） | ✅（Overpass API の wiki と openstreetmap.org/copyright・OSMF の帰属の指針の原文、2026-11-07。予備のサーバーの運営と利用の決まりは Overpass API の wiki の公開サーバーの一覧、2026-11-24） |
-| OpenStreetMap の路線と駅の種（© OpenStreetMap contributors） | Overpass から取れないときに使う、大阪の中心の路線と駅（`server/rail_seed/`。Overpass の返事から使う項目だけを残した JSON をリポジトリとコンテナに同梱） | **ODbL**（OSM から作ったデータベースを配るので、帰属を示し ODbL のまま配る） | 要（OSM の帰属と ODbL） | ✅ 画面の「経路・位置・電車の路線と駅: © OpenStreetMap contributors」。同梱の JSON と同じフォルダの `server/rail_seed/README.md` に、著作権の表示と ODbL の URI を置いた（「6」の 7） | ✅（ODbL 1.0 の原文、2026-11-24。データベースを公に配るなら ODbL のまま配り〔4.2 a・4.4〕、ライセンスの写しか URI をデータベースと説明に添える〔4.2 b〕。ファイルに入れられなければ、見つけやすいフォルダに置く〔4.2 d〕） |
+| **Overpass API**（`overpass-api.de`。込んでいるときは予備の公開サーバー `overpass.private.coffee`・`overpass.kumi.systems`〔どちらも Private.coffee の運営。kumi.systems は旧名〕）と、OpenStreetMap の路線と駅（© OpenStreetMap contributors） | 時刻表の便が無い組みの、乗換なしの電車の目安（`server/rail.py`） | データは **ODbL**。Overpass の公開サーバーの利用方針（1 日 1 万回・1 GB まで、定期的な利用はその 100 分の 1、並列にしない、名乗る、429 のあとは間をあける。商用は自前か有料のサーバー）に従う。予備の Private.coffee は「どの用途でも使ってよい・回数の制限なし・大規模に使うなら事前に連絡」。範囲ごとに 14 日の作り置き・全サーバーの合計で 1 度に 1 つ・5 秒あける・1 日 100 回まで。名乗りは `IntenTrip/1.0` | 要（OSM の帰属と ODbL） | ✅ 出す（画面の出典に `© OpenStreetMap contributors`） | ✅（Overpass API の wiki と openstreetmap.org/copyright・OSMF の帰属の指針の原文、2026-11-07。予備のサーバーの運営と利用の決まりは Overpass API の wiki の公開サーバーの一覧、2026-11-24） |
+| OpenStreetMap の路線と駅の種（© OpenStreetMap contributors） | Overpass から取れないときに使う、大阪の中心の路線と駅（`server/rail_seed/`。Overpass の返事から使う項目だけを残した JSON をリポジトリとコンテナに同梱） | **ODbL**（OSM から作ったデータベースを配るので、帰属を示し ODbL のまま配る） | 要（OSM の帰属と ODbL） | ✅ 画面の「経路・位置・電車の路線と駅: © OpenStreetMap contributors」。同梱の JSON と同じフォルダの `server/rail_seed/README.md` に、著作権の表示と ODbL の URI を置いた | ✅（ODbL 1.0 の原文、2026-11-24。データベースを公に配るなら ODbL のまま配り〔4.2 a・4.4〕、ライセンスの写しか URI をデータベースと説明に添える〔4.2 b〕。ファイルに入れられなければ、見つけやすいフォルダに置く〔4.2 d〕） |
 | **Nominatim**（OpenStreetMap） | 位置の確認（`server/places.py`） | OpenStreetMap の Nominatim 利用方針（1 秒に 1 回まで、User-Agent の指定、大量利用の禁止） | 結果をそのまま表示しないため、基本は不要 | — | ✅（PR #57 で、1 秒に 1 回・1 つずつを確認し、User-Agent を `IntenTrip/1.0` にそろえた） |
 | **Wikipedia / Wikimedia Commons** の写真 | 場所の写真（Places が無いとき・一覧）（`server/enrich.py`） | **写真ごとにライセンスが違う**（CC BY-SA、パブリックドメインなど）。著作者・ライセンスの表示が必要なものが多い | 要（写真ごと） | ✅ 「写真: 作者・ライセンス（Wikimedia Commons）」を出す。Commons の API から作者・ライセンスを取り、**CC BY・CC BY-SA・CC0・パブリックドメインだけ**を使う（それ以外は、種類のアイコンに戻る。PR #57） | ✅（PR #57 の説明）。写真を枠に合わせて切って見せることが改変に当たるかは、判断が分かれうる |
 | **Flickr** の写真（3 枚） | 例の京都のプラン（`server/sample.json`・`sample.en.json`）の店の写真。本家 第一旭 本店（作者 lazy fri13th・https://www.flickr.com/photos/73479994@N00/53946348734）、三嶋亭 本店（作者 kennejima・https://www.flickr.com/photos/17152247@N00/24577990470）、鍵善良房 四条本店（作者 T.Tseng・https://www.flickr.com/photos/68147320@N02/8373007504）。Wikipedia に記事の写真が無い店に、人が選んで入れた（PR #290）。写真そのものは同梱せず、Flickr の置き場（`live.staticflickr.com`）から読む | 3 枚とも **CC BY 2.0**（作者の表示が必要。改変可） | 要（作者・ライセンス・出典） | ✅ 場所の画面と候補の画面の写真の下に「写真: 作者・CC BY 2.0（Flickr）」を出す（`lib/photo.ts` の `sourceLabel`）。一覧では枠に合わせて切って見せる | ✅（`sample.json` の `author`・`license`・`source` と、2026-11-21 に 3 枚とも置き場から届くことを確認。`web/tests/photo-live.test.mjs`。2026-11-24 に Flickr の oEmbed で、3 枚とも作者と CC BY 2.0 が記録と一致することを確認） |
@@ -63,7 +63,7 @@
 | 地図の「全体を表示」（`MapTools.tsx` の 2 つ目） | **AI が生成（Claude）**。Tabler の maximize・border-corners に似るが、角が丸くなく、一致しない | — | ✅（commit 2215302） |
 | 地図の「現在地」（`MapTools.tsx` の 3 つ目） | **AI が生成（Claude）**。Material Icons の near_me・Lucide の navigation に似るが、一致しない | — | ✅（commit 99bd43a） |
 | プランの画像（`lib/planImage.ts`）・振り返りカード（`lib/recap.ts`）の Canvas の描画 | **AI が生成（Claude）**。描くのは線・円・角の丸い四角・文字と、使う人が撮った写真だけ。乗り物のアイコンは上の Lucide、プランの画像の下地の地図は OpenFreeMap・© OpenStreetMap contributors（「2」） | — | ✅（コードを読んで確認） |
-| ファビコン・アプリアイコン（`web/public/`。「路線図と IT モノグラム」） | **Google の Antigravity（AI エージェント）が生成**（v76nl より） | 生成物の利用条件は未確認。第三者の素材を含まない見込み | ❓ |
+| ファビコン・アプリアイコン（`web/public/`。「路線図と IT モノグラム」） | **Google の Antigravity（AI エージェント）が生成** | 生成物の利用条件は未確認 | ❓ |
 | 構成図（`docs/architecture.png`、ダーク版も。main @ 6120b8a の構成） | 図の作成ツール **stack-diagram**（MIT）で作成（PR #18・#76・#102 の図も同じツール）。Google Cloud の製品は、Google が配る **Google Cloud の公式アイコン**（core products・category icons。作成時に services.google.com から取得）。ほかのロゴは、各社の公式ロゴを取得（svgl・Wikimedia Commons・MapLibre のリポジトリ）。抽象的な物（planner・地図タイル・天気・時刻表・標高）は **Lucide**（ISC）。**ロゴは、各社の商標・著作物** | ツールは MIT。ロゴは各社の商標で、構成図で技術を示す目的の使用。Google Cloud のアイコンは、構成図や資料での使用のために配られている（ツールの説明による。Google の原資料は未確認） | ❓ |
 | 構成図に出ているロゴ | Google Cloud（Cloud Run・Vertex AI・Cloud Build・Firestore・Google Maps Platform の公式アイコン）、React、MapLibre GL、Firebase、GitHub、OpenStreetMap、Wikipedia。利用者・planner・GitHub Pages・OpenFreeMap・Open-Meteo・ODPT・GTFS・国土地理院は、ロゴではなく汎用の絵（Lucide・stack-diagram の利用者の絵） | 各社・各団体の商標・ロゴ | ✅（図から読み取り） |
 | README のスクリーンショット（`data/readme/` の 8 枚。ホーム・プラン・スケジュール・PC の幅、それぞれ明るい画面と暗い画面） | チームが本番の京都の例（`?example`）を撮った画面の写し。写る地図は Google（地図データ ©2026 Google）、写真は Wikimedia Commons の清水寺（Martin Falbisoner）・白川一本橋（アラツク）・花見小路通（Yanajin33） | 画面は自作。地図は Google Maps Platform の利用規約、写真は 3 枚とも CC BY-SA 4.0（README の画像の下に作者・ライセンス・出典を出す） | ✅（README の表示と `sample.json` の写真の記録が一致。白川一本橋は 2026-11-24 に Commons の API でも確認） |
@@ -88,21 +88,25 @@ OFL 1.1 では、フォントを使って作った物（画面・画像）は、
 | 旅の幸福の研究を反映した規則 | チーム（Claude と作成） | 出典を確かめた研究だけを、規則として反映。出典の一覧は `data/travel-happiness-research.md`、反映の説明は `data/happiness-in-app.md`。画面に、論文の文章を転載していない |
 | 例の京都のプラン（`server/sample.json`・英語の `sample.en.json`） | 生成物（Gemini・Places の `place_id`・Wikipedia と Flickr の写真のデータを含む） | 写真は、上の「Wikipedia」と「Flickr」の扱いに従う。Places の評価・営業時間・写真は含まない |
 
-## 6. 確認が残っている点
+## 6. 確認の記録と、残っている点
 
-2026-11-07 に、Open-Meteo・Wikipedia・OSRM／Nominatim の出典の表示が対応済みであること（PR #57）、アプリ内の `<svg` の出典（各コードのコメントと「3」。Issue #118）、フォントのライセンス（「4」）を確かめた。firebase の SDK のライセンスは、2026-11-24 に確かめた（「1」）。構成図のアイコンの出どころは、「3」に書いた。
+確認したこと:
+
+- 2026-11-07 に、Open-Meteo・Wikipedia・OSRM／Nominatim の出典の表示が対応済みであること（PR #57）、アプリ内の `<svg` の出典（各コードのコメントと「3」。Issue #118）、フォントのライセンス（「4」）を確かめた。firebase の SDK のライセンスは、2026-11-24 に確かめた（「1」）。構成図のアイコンの出どころは、「3」に書いた。
+- **共有する画像**（プランの画像・振り返りカード）: OSM の下地には出典を入れてある（PR #79）。時刻表の便は、ライセンスに合わせて、共有の画像では「バス N分」だけにしてある。
+- 同梱の OpenStreetMap の路線と駅（`server/rail_seed/`）には、`server/rail_seed/README.md` で、ODbL と出典の表示を添えた（`© OpenStreetMap contributors`、ODbL 1.0 の URI、取得元、加工の内容）。ODbL 4.2 は、データベースを公に配るとき、ライセンスの写しか URI を添えることを求める（ファイルに入れられなければ、見つけやすいフォルダに置く）。
+
+残っている点:
 
 1. Antigravity が生成したアイコンの利用条件は、原資料で確認できていない（「3」の ❓）。
 2. 地図の帰属表示（OpenFreeMap／OpenStreetMap、Google）と、Open-Meteo・Wikipedia・国土地理院の出典は、PR の時点で、iPhone の大きさで撮って確認した。実機での目視は、していない。
-3. **共有する画像**（プランの画像・振り返りカード）: OSM の下地には出典を入れてある（PR #79）。時刻表の便は、ライセンスに合わせて、共有の画像では「バス N分」だけにしてある。
-4. Wikipedia の写真を、CSS で枠に合わせて切って見せることが改変に当たるかは、判断が分かれうる（PR #57 に記載）。
-7. ~~同梱の OpenStreetMap の路線と駅（`server/rail_seed/`）に、ODbL と出典の表示を添える~~ → 2026-11-24 に、`server/rail_seed/README.md` を置いた（`© OpenStreetMap contributors`、ODbL 1.0 の URI、取得元、加工の内容）。ODbL 4.2 は、データベースを公に配るとき、ライセンスの写しか URI を添えることを求める（ファイルに入れられなければ、見つけやすいフォルダに置く）。
+3. Wikipedia の写真を、CSS で枠に合わせて切って見せることが改変に当たるかは、判断が分かれうる（PR #57 に記載）。
 
 ## 7. スライドとデモ動画で使った物
 
 スライドとデモ動画は、提出物として別に出す（アプリには入らない）。画面の写しに写る地図・写真・データは、上の「2」の扱いのまま（Google の地図の表示・写真の作者とライセンスの表示ごと写す）。2026-11-09 に、各ライセンスの原文を確かめた。
 
-2026-11-24 に、決勝用に作り直したスライド（`プレゼンスライド_いいおゼミ_1124_v1.pptx`・9 枚）とデモ動画（`デモ動画_いいおゼミ.mp4`・1 分 30 秒・1920×1080・音声なし）に合わせて直した。スライドの中身は本人が見直し中で、まだ変わりうる（字・アイコン・道具が変わったら、この表を直す）。予選で使った **BIZ UDPゴシック**は、決勝のスライドとデモ動画には使っていない（スライドは Noto Sans JP、動画は Figtree と Noto Sans CJK JP）。
+決勝のスライド（10 枚）とデモ動画（`デモ動画_いいおゼミ.mp4`・1 分 30 秒・1920×1080・音声なし）で使った物を、下の表に示す。スライドの字は Noto Sans JP、動画の字は Figtree と Noto Sans CJK JP。
 
 | 名前 | 用途 | ライセンス | 著作権者 | 確認 |
 |---|---|---|---|---|
@@ -110,8 +114,8 @@ OFL 1.1 では、フォントを使って作った物（画面・画像）は、
 | **Noto Sans CJK JP** | デモ動画の字幕と札の和文（Noto Sans JP と同じ字形） | SIL Open Font License 1.1 | © 2014-2021 Adobe | ✅（フォントの名前表と、https://github.com/notofonts/noto-cjk の Sans/LICENSE、2026-11-24） |
 | **Figtree** | デモ動画の字幕と札の欧文と数字（画面と同じ） | SIL Open Font License 1.1 | Copyright 2022 The Figtree Project Authors（Erik Kennedy） | ✅（「4」と同じ。フォントの名前表も一致） |
 | Lucide のアイコン（`react-icons` 5.4.0 の `lu`。users・globe・graduation-cap・play） | スライドの札と行の印（色と大きさを変えて画像にした） | ISC（`react-icons` は MIT） | Lucide Contributors（`react-icons` は kamijin_fanta ほか） | ✅ |
-| Google Cloud の公式アイコン（Cloud Run・Vertex AI・Google Maps Platform）と Firebase のロゴ | スライドの 1 枚目と 8 枚目の印（構成図から切り出した） | 「3」の構成図と同じ（Google の商標） | Google LLC | ❓（「3」と同じく、Google の原資料は未確認） |
-| 混雑の記号のペンギン | スライドの 1 枚目と 9 枚目 | 自作（「3」） | チーム | — |
+| Google Cloud の公式アイコン（Cloud Run・Vertex AI・Google Maps Platform）と Firebase のロゴ | スライドの 1・8・9 枚目の印（構成図から切り出した） | 「3」の構成図と同じ（Google の商標） | Google LLC | ❓（「3」と同じく、Google の原資料は未確認） |
+| 混雑の記号のペンギン | スライドの 1 枚目と 10 枚目 | 自作（「3」） | チーム | — |
 | アプリのアイコン（`web/public/icon-512.png` と同じファイル） | デモ動画の題と終わりの札 | 自作（「3」のファビコン・アプリアイコン） | チーム | — |
 | `qrcode`（1.5.4） | スライドとデモ動画の終わりの札の公開 URL の QR コード | MIT | Ryan Day ほか。QR コードは株式会社デンソーウェーブの登録商標 | ✅ |
 | Remotion（4.0.541。`@remotion/fonts`・`@remotion/media` を含む） | デモ動画の字幕と場面の札の合成（動画に素材として入らない） | Remotion License の Free License（個人と、社員 3 人までの営利団体は無料） | Remotion | ✅（https://github.com/remotion-dev/remotion の LICENSE.md と、手元のパッケージの LICENSE.md） |
