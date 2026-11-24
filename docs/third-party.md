@@ -1,6 +1,6 @@
 # 著作物利用シートの下書き（使った素材・ライブラリ・データの出典とライセンス）
 
-確認日: 2026-11-07（PR #112 までの `main` を反映。そのあとに入った物は、各行に書き足した）。この文書は、項目を**名前・用途・ライセンス・表示の要否・画面での表示・確認状態**で整理した下書き。提出した著作物利用シート（運営の指定様式。列は No.・著作物の名称・種類・入手元URL・権利者名・ライセンス形態・改変の有無）は、この内容を写したもの。
+確認日: 2026-11-07（PR #112 までの `main` を反映。そのあとに入った物は、各行に書き足した）。2026-11-24 に、決勝の版（PR #356 までの `main`）と決勝のスライド・デモ動画に合わせて見直した（予選の提出〔PR #260 までの `main`〕からの差分で、増えた物・変わった物を足し、「7」を今の字と道具に直した。依存物〔`web/package.json`・`pnpm-lock.yaml`・`server/requirements.txt`・`Dockerfile`〕は予選から変わっていない）。この文書は、項目を**名前・用途・ライセンス・表示の要否・画面での表示・確認状態**で整理した下書き。提出した著作物利用シート（運営の指定様式。列は No.・著作物の名称・種類・入手元URL・権利者名・ライセンス形態・改変の有無）は、この内容を写したもの。
 **確認状態**: ✅ 確認済み（コード・パッケージ情報・資料で確かめた）／❓ 未確認（一般に知られているが、この作業では原資料を確かめていない）／⚠️ 要対応（表示などが足りない可能性）。
 
 ## 1. ライブラリ
@@ -32,15 +32,15 @@
 |---|---|---|---|---|---|
 | **公共交通オープンデータセンター（ODPT）**の時刻表（バス・電車） | 便と、目安の移動時間（`server/bus.py`） | **公共交通オープンデータ基本ライセンス**（出典の表示が必要）。**使うのは、出典表示で済むライセンスの時刻表だけ**（CC BY-SA・ODbL・NC、チャレンジ限定、事前承認が要るものは使わない）。7 日で取り直す。丸ごと取れる形にしない（1 回 3 便まで、回数の上限） | 要（事業者・版・ライセンス・正確性を保証しない旨・問い合わせ先） | ✅ 出す（`BusCredit.tsx`、シートの下とプランの下） | ✅（PR #38・#52 の説明とコード） |
 | **Google Maps Platform**（Maps JavaScript API） | 地図（キーがあるとき） | Google Maps Platform の利用規約 | 要（Google の地図に組み込みの帰属表示） | ✅ 地図に組み込み（実機で目視は未） | ❓ |
-| **Google Maps Platform**（Places API (New)） | 写真・評価・営業時間・位置、地図に写っている範囲の検索（この付近で検索。Text Search の `locationRestriction`。結果は保存しない）（`server/gplaces.py`） | Places の規約。Google 以外の地図と一緒に使えない。保存してよいのは `place_id`（期限なし）と緯度経度（30 日まで）だけ | 要（写真の投稿者名と、Google マップの帰属） | ✅ 出す（`GooglePlace.tsx`）。Google マップが地図のときだけ表示 | ✅（PR #17・#22 の説明とコード）。本番で有効かは未確認 |
-| **Vertex AI（Gemini）** | 候補・混雑の推定・ミッション・頼みの解釈・画像の読み取り | Google Cloud の利用規約 | — | ✅ Gemini が作った文に記号を付ける | ✅ |
+| **Google Maps Platform**（Places API (New)） | 写真・評価・営業時間・位置、地図に写っている範囲の検索（この付近で検索。Text Search の `locationRestriction`。結果は保存しない）、営業状況（`businessStatus`。閉業・休業の店を候補から外す）、一覧の小さな写真（`/api/place-thumb`。写真の項目だけを頼む）（`server/gplaces.py`） | Places の規約。Google 以外の地図と一緒に使えない。保存してよいのは `place_id`（期限なし）と緯度経度（30 日まで）だけ | 要（写真の投稿者名と、Google マップの帰属） | ✅ 出す（`GooglePlace.tsx`）。Google マップが地図のときだけ表示 | ✅（PR #17・#22 の説明とコード）。本番で有効かは未確認 |
+| **Vertex AI（Gemini）** | 候補・混雑の推定・ミッション・頼みの解釈・画像の読み取り・泊まりの旅の 1 行の文から行き先・日付などを読み取る（`server/tripask.py`） | Google Cloud の利用規約 | — | ✅ Gemini が作った文に記号を付ける | ✅ |
 | **OpenFreeMap** と、地図データ（© OpenStreetMap contributors、OpenMapTiles） | 地図のタイルとスタイル（MapLibre） | 地図データは ODbL。OpenFreeMap の利用条件に従う | 要（帰属表示） | ✅ 地図の帰属表示を出す設定（`attributionControl: { compact: true }`。目視は未） | ❓ |
 | **OSRM**（`routing.openstreetmap.de` の公開サーバー） | 徒歩・車の移動時間と経路の線（`server/enrich.py`） | 経路データは OpenStreetMap（ODbL）。公開サーバーの利用方針に従う（大量利用は想定されていない） | 要（OSM の帰属） | ✅ 「経路と位置: © OpenStreetMap contributors」を、プランと候補の一覧の下に出す（PR #57）。回数は 1 つずつ・1 秒あけて送る | ❓（FOSSGIS の規約の全文は読めていない） |
-| **Overpass API**（`overpass-api.de`。込んでいるときは予備の公開サーバー `overpass.kumi.systems`・`overpass.private.coffee`）と、OpenStreetMap の路線と駅（© OpenStreetMap contributors） | 時刻表の便が無い組みの、乗換なしの電車の目安（`server/rail.py`） | データは **ODbL**。Overpass の公開サーバーの利用方針（1 日 1 万回・1 GB まで、定期的な利用はその 100 分の 1、並列にしない、名乗る、429 のあとは間をあける。商用は自前か有料のサーバー）に従う。範囲ごとに 14 日の作り置き・全サーバーの合計で 1 度に 1 つ・5 秒あける・1 日 100 回まで。名乗りは `IntenTrip/1.0` | 要（OSM の帰属と ODbL） | 出す（画面の出典の表示は本体が作る） | ✅（Overpass API の wiki と openstreetmap.org/copyright・OSMF の帰属の指針の原文、2026-11-07） |
-| OpenStreetMap の路線と駅の種（© OpenStreetMap contributors） | Overpass から取れないときに使う、大阪の中心の路線と駅（`server/rail_seed/`。Overpass の返事から使う項目だけを残した JSON をリポジトリとコンテナに同梱） | **ODbL**（OSM から作ったデータベースを配るので、帰属を示し ODbL のまま配る） | 要（OSM の帰属と ODbL） | ✅ 画面の「経路・位置・電車の路線と駅: © OpenStreetMap contributors」 | ❓（同梱の可否は ODbL の原文で未確認） |
+| **Overpass API**（`overpass-api.de`。込んでいるときは予備の公開サーバー `overpass.private.coffee`・`overpass.kumi.systems`〔どちらも Private.coffee の運営。kumi.systems は旧名〕）と、OpenStreetMap の路線と駅（© OpenStreetMap contributors） | 時刻表の便が無い組みの、乗換なしの電車の目安（`server/rail.py`） | データは **ODbL**。Overpass の公開サーバーの利用方針（1 日 1 万回・1 GB まで、定期的な利用はその 100 分の 1、並列にしない、名乗る、429 のあとは間をあける。商用は自前か有料のサーバー）に従う。予備の Private.coffee は「どの用途でも使ってよい・回数の制限なし・大規模に使うなら事前に連絡」。範囲ごとに 14 日の作り置き・全サーバーの合計で 1 度に 1 つ・5 秒あける・1 日 100 回まで。名乗りは `IntenTrip/1.0` | 要（OSM の帰属と ODbL） | 出す（画面の出典の表示は本体が作る） | ✅（Overpass API の wiki と openstreetmap.org/copyright・OSMF の帰属の指針の原文、2026-11-07。予備のサーバーの運営と利用の決まりは Overpass API の wiki の公開サーバーの一覧、2026-11-24） |
+| OpenStreetMap の路線と駅の種（© OpenStreetMap contributors） | Overpass から取れないときに使う、大阪の中心の路線と駅（`server/rail_seed/`。Overpass の返事から使う項目だけを残した JSON をリポジトリとコンテナに同梱） | **ODbL**（OSM から作ったデータベースを配るので、帰属を示し ODbL のまま配る） | 要（OSM の帰属と ODbL） | ✅ 画面の「経路・位置・電車の路線と駅: © OpenStreetMap contributors」。同梱の JSON と同じフォルダの `server/rail_seed/README.md` に、著作権の表示と ODbL の URI を置いた（「6」の 7） | ✅（ODbL 1.0 の原文、2026-11-24。データベースを公に配るなら ODbL のまま配り〔4.2 a・4.4〕、ライセンスの写しか URI をデータベースと説明に添える〔4.2 b〕。ファイルに入れられなければ、見つけやすいフォルダに置く〔4.2 d〕） |
 | **Nominatim**（OpenStreetMap） | 位置の確認（`server/places.py`） | OpenStreetMap の Nominatim 利用方針（1 秒に 1 回まで、User-Agent の指定、大量利用の禁止） | 結果をそのまま表示しないため、基本は不要 | — | ✅（PR #57 で、1 秒に 1 回・1 つずつを確認し、User-Agent を `IntenTrip/1.0` にそろえた） |
 | **Wikipedia / Wikimedia Commons** の写真 | 場所の写真（Places が無いとき・一覧）（`server/enrich.py`） | **写真ごとにライセンスが違う**（CC BY-SA、パブリックドメインなど）。著作者・ライセンスの表示が必要なものが多い | 要（写真ごと） | ✅ 「写真: 作者・ライセンス（Wikimedia Commons）」を出す。Commons の API から作者・ライセンスを取り、**CC BY・CC BY-SA・CC0・パブリックドメインだけ**を使う（それ以外は、種類のアイコンに戻る。PR #57） | ✅（PR #57 の説明）。写真を枠に合わせて切って見せることが改変に当たるかは、判断が分かれうる |
-| **Flickr** の写真（3 枚） | 例の京都のプラン（`server/sample.json`・`sample.en.json`）の店の写真。本家 第一旭 本店（作者 lazy fri13th・https://www.flickr.com/photos/73479994@N00/53946348734）、三嶋亭 本店（作者 kennejima・https://www.flickr.com/photos/17152247@N00/24577990470）、鍵善良房 四条本店（作者 T.Tseng・https://www.flickr.com/photos/68147320@N02/8373007504）。Wikipedia に記事の写真が無い店に、人が選んで入れた（PR #290）。写真そのものは同梱せず、Flickr の置き場（`live.staticflickr.com`）から読む | 3 枚とも **CC BY 2.0**（作者の表示が必要。改変可） | 要（作者・ライセンス・出典） | ✅ 場所の画面と候補の画面の写真の下に「写真: 作者・CC BY 2.0（Flickr）」を出す（`lib/photo.ts` の `sourceLabel`）。一覧では枠に合わせて切って見せる | ✅（`sample.json` の `author`・`license`・`source` と、2026-11-21 に 3 枚とも置き場から届くことを確認。`web/tests/photo-live.test.mjs`） |
+| **Flickr** の写真（3 枚） | 例の京都のプラン（`server/sample.json`・`sample.en.json`）の店の写真。本家 第一旭 本店（作者 lazy fri13th・https://www.flickr.com/photos/73479994@N00/53946348734）、三嶋亭 本店（作者 kennejima・https://www.flickr.com/photos/17152247@N00/24577990470）、鍵善良房 四条本店（作者 T.Tseng・https://www.flickr.com/photos/68147320@N02/8373007504）。Wikipedia に記事の写真が無い店に、人が選んで入れた（PR #290）。写真そのものは同梱せず、Flickr の置き場（`live.staticflickr.com`）から読む | 3 枚とも **CC BY 2.0**（作者の表示が必要。改変可） | 要（作者・ライセンス・出典） | ✅ 場所の画面と候補の画面の写真の下に「写真: 作者・CC BY 2.0（Flickr）」を出す（`lib/photo.ts` の `sourceLabel`）。一覧では枠に合わせて切って見せる | ✅（`sample.json` の `author`・`license`・`source` と、2026-11-21 に 3 枚とも置き場から届くことを確認。`web/tests/photo-live.test.mjs`。2026-11-24 に Flickr の oEmbed で、3 枚とも作者と CC BY 2.0 が記録と一致することを確認） |
 | **Wikidata**（`query.wikidata.org` の SPARQL） | 記事の写真が無い場所の、代表の写真（P18）と位置の引き当て（`server/enrich.py`） | 項目のデータは **CC0**（パブリックドメイン）。Wikidata Query Service の利用方針（User-Agent で名乗る、同じ住所から同時に 5 本まで、1 分あたり処理 60 秒まで、429 のあとは `Retry-After` だけ待つ）に従う。1 エリアで 1〜3 回（名前を 60 件ずつまとめる）・Wikipedia と同じ順番待ちで 1 つずつ 2.5 秒あける。名乗りは `IntenTrip/1.0` | データは不要。写真は上の「Wikipedia / Wikimedia Commons」と同じく写真ごと | ✅ 写真は Commons の作者・ライセンスを出す（上と同じ） | ✅（Wikidata:Licensing と Wikidata Query Service の User Manual の原文、2026-11-08） |
 | **Open-Meteo** | 天気予報・体感温度（`web/src/lib/weather.ts`） | 非商用は無料。データは CC BY 4.0（帰属の表示が必要） | 要 | ✅ 出す（`WeatherCredit.tsx`。「天気: Open-Meteo.com・CC BY 4.0」、PR #57） | ❓（規約の原文は未確認）。データの元（気象庁など）の出典が要るかは未調査 |
 | **国土地理院の標高タイル（地理院タイル）** | 坂の上り下り（`server/elev.py`） | 出典を示せば使える（加工したことも書く） | 要 | ✅ 出す（`ElevCredit.tsx`、坂のデータを使ったプランのとき。PR #63） | ✅（PR #63 の説明）。規約の原文は未確認 |
@@ -52,9 +52,9 @@
 
 | 対象 | 出典・作者 | ライセンス | 確認 |
 |---|---|---|---|
-| Lucide の形のアイコン: `GeminiMark`・`SparkIcon`（sparkles。Gemini が作った文の頭と、「Gemini に頼む」のボタン）、行きたい場所の一覧の空く時間の一言 `StartPick` の `QuietIcon`（clock）、`MapsLink`（external-link）、`ModeIcon`・`lib/modeShape.ts`（bus・train-front・footprints。プランの画像の Canvas にも描く）、`Sheet`・`StopSheet` の矢印（chevron-left・chevron-right）、`WeatherIcon`（sun ほか 8 つ）、場所の種類のアイコン `lib/kindIcon.ts`（trees・landmark・store・utensils・coffee。一覧の写真の無い場所 `Thumb` と、地図の候補の印 `lib/mapLayer.ts` に使う）、`MapTools` の全画面（maximize-2・minimize-2） | **Lucide**（https://lucide.dev）。著作権は Lucide Icons and Contributors（一部は Feather に由来、Cole Bemis）。landmark・store・sparkles は v0.469.0 の形（今の版とは形が違う） | ISC（Feather 由来の部分は MIT） | ✅（コードのコメントと、path の一致） |
+| Lucide の形のアイコン: `GeminiMark`・`SparkIcon`（sparkles。Gemini が作った文の頭と、「Gemini に頼む」のボタン）、行きたい場所の一覧の空く時間の一言 `StartPick` の `QuietIcon`（clock）、`MapsLink`（external-link）、`ModeIcon`・`lib/modeShape.ts`（bus・train-front・footprints・car。プランの画像の Canvas にも描く。car は車で回る旅の区間）、`Sheet`・`StopSheet` の矢印（chevron-left・chevron-right）、`WeatherIcon`（sun ほか 8 つ）、場所の種類のアイコン `lib/kindIcon.ts`（trees・landmark・store・utensils・coffee。一覧の写真の無い場所 `Thumb` と、地図の候補の印 `lib/mapLayer.ts` に使う）、`MapTools` の全画面（maximize-2・minimize-2） | **Lucide**（https://lucide.dev）。著作権は Lucide Icons and Contributors（一部は Feather に由来、Cole Bemis）。landmark・store・sparkles は v0.469.0 の形（今の版とは形が違う） | ISC（Feather 由来の部分は MIT） | ✅（コードのコメントと、path の一致。car と clock は 2026-11-24 に Lucide のリポジトリの原本と path の文字が一致） |
 | 場所の種類のアイコン（`lib/kindIcon.ts`）の鳥居。一覧の写真の無い場所 `Thumb` と、地図の候補の印 `lib/mapLayer.ts` に使う | **Tabler Icons**（https://tabler.io/icons）の torii。著作権は Paweł Kuna | MIT | ✅（コードのコメントと、path の一致） |
-| 地図の所要時間の札のアイコン（`lib/mapLayer.ts` の `ICON`。徒歩・電車・バス） | **Material Icons**（https://fonts.google.com/icons?icon.set=Material+Icons）の directions_walk・train・directions_transit。著作権は Google | Apache License 2.0（https://github.com/google/material-design-icons） | ✅（Google のリポジトリの原本と path の文字が一致。PR #8 の commit 3a0d136 の本文にも記載） |
+| 地図の所要時間の札のアイコン（`lib/mapLayer.ts` の `ICON`。徒歩・電車・バス・車） | **Material Icons**（https://fonts.google.com/icons?icon.set=Material+Icons）の directions_walk・train・directions_transit・directions_car。著作権は Google | Apache License 2.0（https://github.com/google/material-design-icons） | ✅（Google のリポジトリの原本と path の文字が一致。PR #8 の commit 3a0d136 の本文にも記載。directions_car は commit 9520dac で足し、2026-11-24 に原本と一致を確認） |
 | 星の評価（`GooglePlace.tsx` の `STAR`） | **Feather**（https://feathericons.com）の star を 0.94 倍にした形。座標は Claude が書き直したもので、path の文字は一致しないが、角の点が 0.03 以内で重なる。著作権は Cole Bemis | MIT | ✅（形の重ね合わせ） |
 | 「Google でログイン」のボタンの G のロゴ（`GoogleMark.tsx`。ホーム画面・アカウント・保存の勧め） | **Google** が「Sign in with Google」のブランドの決まりで配っている G のロゴ（https://developers.google.com/identity/branding-guidelines）。著作権・商標は Google LLC | ブランドの決まりに従って使う（形と色は変えない） | ✅（PR #234） |
 | 混雑の記号のペンギン（`CrowdMark.tsx` の `BODY`・`BELLY`・`FLIPPER`・`BEAK`・`FEET`・目の円・群れの並べ方 `LAYOUT`）と、調整の「Gemini に頼む」の 1 羽（`PenguinMark`。同じ形） | **AI が生成（Claude）**。Claude が作った見本の中から、作者（Omupp）が形を選んだ。群れの並べ方（後ろの列の頭が前の列の上からのぞく）は、万博のゲートの混雑の表示を参考にした（参考にしたのは並べ方だけ） | — | ✅（どのアイコン集とも一致しない。commit 5e01140・1b03341 の本文と、見本の記録） |
@@ -66,6 +66,8 @@
 | ファビコン・アプリアイコン（`web/public/`。「路線図と IT モノグラム」） | **Google の Antigravity（AI エージェント）が生成**（v76nl より） | 生成物の利用条件は未確認。第三者の素材を含まない見込み | ❓ |
 | 構成図（`docs/architecture.png`、ダーク版も。main @ 6120b8a の構成） | 図の作成ツール **stack-diagram**（MIT）で作成（PR #18・#76・#102 の図も同じツール）。Google Cloud の製品は、Google が配る **Google Cloud の公式アイコン**（core products・category icons。作成時に services.google.com から取得）。ほかのロゴは、各社の公式ロゴを取得（svgl・Wikimedia Commons・MapLibre のリポジトリ）。抽象的な物（planner・地図タイル・天気・時刻表・標高）は **Lucide**（ISC）。**ロゴは、各社の商標・著作物** | ツールは MIT。ロゴは各社の商標で、構成図で技術を示す目的の使用。Google Cloud のアイコンは、構成図や資料での使用のために配られている（ツールの説明による。Google の原資料は未確認） | ❓ |
 | 構成図に出ているロゴ | Google Cloud（Cloud Run・Vertex AI・Cloud Build・Firestore・Google Maps Platform の公式アイコン）、React、MapLibre GL、Firebase、GitHub、OpenStreetMap、Wikipedia。利用者・planner・GitHub Pages・OpenFreeMap・Open-Meteo・ODPT・GTFS・国土地理院は、ロゴではなく汎用の絵（Lucide・stack-diagram の利用者の絵） | 各社・各団体の商標・ロゴ | ✅（図から読み取り） |
+| README のスクリーンショット（`data/readme/` の 8 枚。ホーム・プラン・スケジュール・PC の幅、それぞれ明るい画面と暗い画面） | チームが本番の京都の例（`?example`）を撮った画面の写し。写る地図は Google（地図データ ©2026 Google）、写真は Wikimedia Commons の清水寺（Martin Falbisoner）・白川一本橋（アラツク）・花見小路通（Yanajin33） | 画面は自作。地図は Google Maps Platform の利用規約、写真は 3 枚とも CC BY-SA 4.0（README の画像の下に作者・ライセンス・出典を出す） | ✅（README の表示と `sample.json` の写真の記録が一致。白川一本橋は 2026-11-24 に Commons の API でも確認） |
+| README のバッジ（Cloud Run・Gemini・Firebase・React・TypeScript・Vite・MapLibre GL・Python・pnpm・uv と、GitHub Actions の CI の状態） | **Shields.io**（https://shields.io/）が作る画像。ロゴは Shields.io が使う **Simple Icons**（Google Cloud・Google Gemini・Firebase・React・TypeScript・Vite・MapLibre・Python・pnpm・uv）。CI のバッジは GitHub が作る。**ロゴは各社・各団体の商標** | Shields.io は MIT または Apache-2.0、Simple Icons は CC0 1.0（ロゴは各社の商標で、技術を示すために使用） | ✅（Simple Icons の LICENSE.md と npm の `simple-icons`、Shields.io の npm の `badge-maker` と GitHub のリポジトリのライセンス、2026-11-24） |
 
 ## 4. フォント
 
@@ -84,7 +86,7 @@ OFL 1.1 では、フォントを使って作った物（画面・画像）は、
 | ミッションの例 25 個（`web/src/data/odai.json`） | @karinkamonohashi | 場所の種類ごとに 5 つ。Gemini がミッションを作る際の例として使う（PR #44 で、言い方を調整） |
 | 選んだ理由の定型（`web/src/lib/why.ts`） | チーム | 「人が少なそう」など 5 つ |
 | 旅の幸福の研究を反映した規則 | チーム（Claude と作成） | 出典を確かめた研究だけを、規則として反映。出典の一覧は `data/travel-happiness-research.md`、反映の説明は `data/happiness-in-app.md`。画面に、論文の文章を転載していない |
-| 例の京都のプラン（`server/sample.json`） | 生成物（Gemini・Places の `place_id`・Wikipedia の写真のデータを含む） | 写真は、上の「Wikipedia」の扱いに従う。Places の評価・営業時間・写真は含まない |
+| 例の京都のプラン（`server/sample.json`・英語の `sample.en.json`） | 生成物（Gemini・Places の `place_id`・Wikipedia と Flickr の写真のデータを含む） | 写真は、上の「Wikipedia」と「Flickr」の扱いに従う。Places の評価・営業時間・写真は含まない |
 
 ## 6. 要対応（提出の前に確かめる・直すこと）
 
@@ -96,16 +98,26 @@ OFL 1.1 では、フォントを使って作った物（画面・画像）は、
 4. 地図の帰属表示（OpenFreeMap／OpenStreetMap、Google）と、Open-Meteo・Wikipedia・国土地理院の出典を、**実機で目視**して確かめる（PR の時点で、iPhone の大きさで撮って確認したものはある）。
 5. **共有する画像**（プランの画像・振り返りカード）の出典の扱い。OSM の下地には出典を入れてある（PR #79）。時刻表の便は、ライセンスに合わせて、共有の画像では「バス N分」だけにしてある。
 6. Wikipedia の写真を、CSS で枠に合わせて切って見せることが、改変に当たるか（PR #57 で、判断が分かれうると記載）。
+7. ~~同梱の OpenStreetMap の路線と駅（`server/rail_seed/`）に、ODbL と出典の表示を添える~~ → 2026-11-24 に、`server/rail_seed/README.md` を置いた（`© OpenStreetMap contributors`、ODbL 1.0 の URI、取得元、加工の内容）。ODbL 4.2 は、データベースを公に配るとき、ライセンスの写しか URI を添えることを求める（ファイルに入れられなければ、見つけやすいフォルダに置く）。
 
 ## 7. スライドとデモ動画で使った物
 
 スライドとデモ動画は、提出物として別に出す（アプリには入らない）。画面の写しに写る地図・写真・データは、上の「2」の扱いのまま（Google の地図の表示・写真の作者とライセンスの表示ごと写す）。2026-11-09 に、各ライセンスの原文を確かめた。
 
+2026-11-24 に、決勝用に作り直したスライド（`プレゼンスライド_いいおゼミ_1124_v1.pptx`・9 枚）とデモ動画（`デモ動画_いいおゼミ.mp4`・1 分 30 秒・1920×1080・音声なし）に合わせて直した。スライドの中身は本人が見直し中で、まだ変わりうる（字・アイコン・道具が変わったら、この表を直す）。予選で使った **BIZ UDPゴシック**は、決勝のスライドとデモ動画には使っていない（スライドは Noto Sans JP、動画は Figtree と Noto Sans CJK JP）。
+
 | 名前 | 用途 | ライセンス | 著作権者 | 確認 |
 |---|---|---|---|---|
-| **BIZ UDPゴシック**（BIZ UDPGothic） | スライドの字・デモ動画の字幕と札 | SIL Open Font License 1.1 | Copyright 2022 The BIZ UDGothic Project Authors（株式会社モリサワ） | ✅（https://github.com/googlefonts/morisawa-biz-ud-gothic の OFL.txt） |
-| Lucide のアイコン（`react-icons` 5.4.0 の `lu`） | スライドの札と行の印（色と大きさを変えて画像にした） | ISC（`react-icons` は MIT） | Lucide Contributors（`react-icons` は kamijin_fanta ほか） | ✅ |
-| `qrcode`（1.5.4） | スライドの公開 URL の QR コード | MIT | Ryan Day ほか。QR コードは株式会社デンソーウェーブの登録商標 | ✅ |
-| Remotion（4.0.541） | デモ動画の字幕と場面の札の合成（動画に素材として入らない） | Remotion License の Free License（個人は無料） | Remotion | ✅（https://github.com/remotion-dev/remotion の LICENSE.md） |
-| pptxgenjs（3.12.0）・sharp（0.33.5）・Playwright・FFmpeg | スライドを作る・画面を撮る・動画を書き出す（作品に素材として入らない） | MIT（pptxgenjs）・Apache-2.0（sharp・Playwright）・LGPL 2.1 以降（FFmpeg） | 各作者 | ✅（種類のみ） |
+| **Noto Sans JP** | スライドの字（Google スライドで選べる字。pptx にフォントのファイルは入れない） | SIL Open Font License 1.1 | Copyright 2014-2021 Adobe（Reserved Font Name 'Source'）。Google の Noto フォント | ✅（https://github.com/google/fonts/tree/main/ofl/notosansjp の OFL.txt・METADATA.pb、2026-11-24） |
+| **Noto Sans CJK JP** | デモ動画の字幕と札の和文（Noto Sans JP と同じ字形） | SIL Open Font License 1.1 | © 2014-2021 Adobe | ✅（フォントの名前表と、https://github.com/notofonts/noto-cjk の Sans/LICENSE、2026-11-24） |
+| **Figtree** | デモ動画の字幕と札の欧文と数字（画面と同じ） | SIL Open Font License 1.1 | Copyright 2022 The Figtree Project Authors（Erik Kennedy） | ✅（「4」と同じ。フォントの名前表も一致） |
+| Lucide のアイコン（`react-icons` 5.4.0 の `lu`。users・globe・graduation-cap・play） | スライドの札と行の印（色と大きさを変えて画像にした） | ISC（`react-icons` は MIT） | Lucide Contributors（`react-icons` は kamijin_fanta ほか） | ✅ |
+| Google Cloud の公式アイコン（Cloud Run・Vertex AI・Google Maps Platform）と Firebase のロゴ | スライドの 1 枚目と 8 枚目の印（構成図から切り出した） | 「3」の構成図と同じ（Google の商標） | Google LLC | ❓（「3」と同じく、Google の原資料は未確認） |
+| 混雑の記号のペンギン | スライドの 1 枚目と 9 枚目 | 自作（「3」） | チーム | — |
+| アプリのアイコン（`web/public/icon-512.png` と同じファイル） | デモ動画の題と終わりの札 | 自作（「3」のファビコン・アプリアイコン） | チーム | — |
+| `qrcode`（1.5.4） | スライドとデモ動画の終わりの札の公開 URL の QR コード | MIT | Ryan Day ほか。QR コードは株式会社デンソーウェーブの登録商標 | ✅ |
+| Remotion（4.0.541。`@remotion/fonts`・`@remotion/media` を含む） | デモ動画の字幕と場面の札の合成（動画に素材として入らない） | Remotion License の Free License（個人と、社員 3 人までの営利団体は無料） | Remotion | ✅（https://github.com/remotion-dev/remotion の LICENSE.md と、手元のパッケージの LICENSE.md） |
+| pptxgenjs（3.12.0）・sharp（0.33.5）・JSZip（3.10.2）・React（スライドは 18.3.1 の react-dom/server、動画は 19.3.1）・Playwright（1.66.0 の alpha）・FFmpeg（8.0.1。x264 を含む組み立て） | スライドを作る・アイコンを画像にする・本番の画面を自動で操作して撮る（スライドの画面の写しとデモ動画の録画）・動画を書き出す（作品に素材として入らない） | MIT（pptxgenjs・React）・Apache-2.0（sharp・Playwright）・MIT か GPL 3.0 以降の選択（JSZip。MIT を選ぶ）・GPL 2.0 以降（使った FFmpeg。`ffmpeg -L` の表示。FFmpeg 本体は LGPL 2.1 以降だが、x264 を含めて組み立てたため GPL になる） | 各作者 | ✅（手元のパッケージの LICENSE と package.json、2026-11-24） |
 | デモ動画の押した所の印 | 押す前に出す灰の丸（撮影の台本が描く） | 自作 | チーム | — |
+
+スライドの 2・3 枚目に出す数字の出典（観光庁「訪日外国人旅行者の受入環境に関する調査」・JNTO 訪日外客数・観光庁「オーバーツーリズムの未然防止・抑制に向けた取組」の 1 文の引用・JTB 総合研究所「ライフスタイルと旅行に関する調査2026」・Google Maps Platform の場所の件数）は、スライドの中に出典として書いてある。予選のスライドにも同じ出典があり、著作物利用シートには載せていない（数字の参照と、出典を示した短い引用）。
