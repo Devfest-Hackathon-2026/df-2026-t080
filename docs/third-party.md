@@ -1,7 +1,7 @@
-# 著作物利用シートの下書き（使った素材・ライブラリ・データの出典とライセンス）
+# 使った素材・ライブラリ・データの出典とライセンス（著作物利用シートの元資料）
 
 確認日: 2026-11-07（PR #112 までの `main` を反映。そのあとに入った物は、各行に書き足した）。2026-11-24 に、決勝の版（PR #356 までの `main`）と決勝のスライド・デモ動画に合わせて見直した（予選の提出〔PR #260 までの `main`〕からの差分で、増えた物・変わった物を足し、「7」を今の字と道具に直した。依存物〔`web/package.json`・`pnpm-lock.yaml`・`server/requirements.txt`・`Dockerfile`〕は予選から変わっていない）。この文書は、項目を**名前・用途・ライセンス・表示の要否・画面での表示・確認状態**で整理した下書き。提出した著作物利用シート（運営の指定様式。列は No.・著作物の名称・種類・入手元URL・権利者名・ライセンス形態・改変の有無）は、この内容を写したもの。
-**確認状態**: ✅ 確認済み（コード・パッケージ情報・資料で確かめた）／❓ 未確認（一般に知られているが、この作業では原資料を確かめていない）／⚠️ 要対応（表示などが足りない可能性）。
+**確認状態**: ✅ 確認済み（コード・パッケージ情報・資料で確かめた）／❓ 未確認（一般に知られているが、この作業では原資料を確かめていない）。
 
 ## 1. ライブラリ
 
@@ -12,7 +12,7 @@
 | React・React DOM（19.3.1） | 画面 | MIT | ✅ |
 | maplibre-gl（6.16.0） | 地図の描画（キーが無いとき） | BSD-3-Clause | ✅ |
 | 上記の依存（`@mapbox/*`、`@maplibre/*`、`earcut`、`gl-matrix`、`bidi-js` ほか） | 地図の描画 | MIT／ISC／BSD-2-Clause／BSD-3-Clause／(MIT OR Apache-2.0) | ✅（種類のみ） |
-| **firebase**（JS SDK。^13.2.0。Google のログインと旅の保存） | Firebase Authentication・Firestore の呼び出し | 一般に Apache-2.0 | ❓（`pnpm licenses` は「Unknown」と表示。公式で確認する） |
+| **firebase**（JS SDK。^13.2.0。Google のログインと旅の保存） | Firebase Authentication・Firestore の呼び出し | Apache-2.0 | ✅（npm のパッケージ情報と、公式リポジトリの LICENSE で確認。2026-11-24。`pnpm licenses` は「Unknown」と表示する） |
 | **Astryx**（`@astryxdesign/core`・`@astryxdesign/theme-neutral` 0.7.11。Meta のデザインシステム） | 画面の部品と見た目（PR #232。Neutral を土台に、IntenTrip のテーマ `web/src/themes/intentrip/` を作った） | MIT | ✅（2026-11-09、ロックファイルの版とパッケージのライセンス） |
 | `@stylexjs/stylex`（0.19.1）と依存（`styleq`・`invariant`・`css-mediaquery`） | Astryx の見た目の仕組み | MIT（`css-mediaquery` は BSD） | ✅（同上） |
 | `lucide-react`（1.70.0） | Astryx の部品のアイコン | ISC（Feather 由来の部分は MIT） | ✅（同上） |
@@ -88,16 +88,14 @@ OFL 1.1 では、フォントを使って作った物（画面・画像）は、
 | 旅の幸福の研究を反映した規則 | チーム（Claude と作成） | 出典を確かめた研究だけを、規則として反映。出典の一覧は `data/travel-happiness-research.md`、反映の説明は `data/happiness-in-app.md`。画面に、論文の文章を転載していない |
 | 例の京都のプラン（`server/sample.json`・英語の `sample.en.json`） | 生成物（Gemini・Places の `place_id`・Wikipedia と Flickr の写真のデータを含む） | 写真は、上の「Wikipedia」と「Flickr」の扱いに従う。Places の評価・営業時間・写真は含まない |
 
-## 6. 要対応（提出の前に確かめる・直すこと）
+## 6. 確認が残っている点
 
-優先度の高い順。**2026-11-07 に、PR #57 で、旧 1〜3（Open-Meteo・Wikipedia・OSRM／Nominatim）は対応済みと分かった。**
+2026-11-07 に、Open-Meteo・Wikipedia・OSRM／Nominatim の出典の表示が対応済みであること（PR #57）、アプリ内の `<svg` の出典（各コードのコメントと「3」。Issue #118）、フォントのライセンス（「4」）を確かめた。firebase の SDK のライセンスは、2026-11-24 に確かめた（「1」）。構成図のアイコンの出どころは、「3」に書いた。
 
-1. ~~アプリ内の `<svg` の出典を、すべて確かめる~~ → 2026-11-07 に確かめ、各コードのコメントと「3」に書いた（Issue #118）。
-2. **Antigravity が生成したアイコンの利用条件**、**firebase の SDK のライセンス**を確かめる（フォントのライセンスは 2026-11-07 に確かめた。「4」）。
-3. 構成図が、運営の要件「Google Cloud 公式のアイコン」を満たすか（今の図は、Google Cloud・Firebase・Maps・Gemini のアイコンを使っているが、公式の配布物かは未確認）。
-4. 地図の帰属表示（OpenFreeMap／OpenStreetMap、Google）と、Open-Meteo・Wikipedia・国土地理院の出典を、**実機で目視**して確かめる（PR の時点で、iPhone の大きさで撮って確認したものはある）。
-5. **共有する画像**（プランの画像・振り返りカード）の出典の扱い。OSM の下地には出典を入れてある（PR #79）。時刻表の便は、ライセンスに合わせて、共有の画像では「バス N分」だけにしてある。
-6. Wikipedia の写真を、CSS で枠に合わせて切って見せることが、改変に当たるか（PR #57 で、判断が分かれうると記載）。
+1. Antigravity が生成したアイコンの利用条件は、原資料で確認できていない（「3」の ❓）。
+2. 地図の帰属表示（OpenFreeMap／OpenStreetMap、Google）と、Open-Meteo・Wikipedia・国土地理院の出典は、PR の時点で、iPhone の大きさで撮って確認した。実機での目視は、していない。
+3. **共有する画像**（プランの画像・振り返りカード）: OSM の下地には出典を入れてある（PR #79）。時刻表の便は、ライセンスに合わせて、共有の画像では「バス N分」だけにしてある。
+4. Wikipedia の写真を、CSS で枠に合わせて切って見せることが改変に当たるかは、判断が分かれうる（PR #57 に記載）。
 7. ~~同梱の OpenStreetMap の路線と駅（`server/rail_seed/`）に、ODbL と出典の表示を添える~~ → 2026-11-24 に、`server/rail_seed/README.md` を置いた（`© OpenStreetMap contributors`、ODbL 1.0 の URI、取得元、加工の内容）。ODbL 4.2 は、データベースを公に配るとき、ライセンスの写しか URI を添えることを求める（ファイルに入れられなければ、見つけやすいフォルダに置く）。
 
 ## 7. スライドとデモ動画で使った物
